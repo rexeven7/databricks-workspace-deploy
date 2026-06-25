@@ -4,6 +4,10 @@ Reusable, parameterized **Azure Databricks** deployment: Terraform stands up the
 workspace and governance; a Databricks Asset Bundle ships an example integration.
 Built for GitHub Actions with the **free (OSS) Terraform CLI** — no Terraform Cloud.
 
+> ✅ **Validated end-to-end on Azure**: workspace, Unity Catalog (bring-your-own
+> storage via an access connector + external location), serverless SQL warehouse,
+> and a serverless bundle job that writes a managed, liquid-clustered Delta table.
+
 > Authored with the [Databricks AI Dev Kit](https://github.com/databricks-solutions/ai-dev-kit);
 > the Databricks-side patterns below are sourced from its skills (`databricks-bundles`,
 > `databricks-jobs`, `databricks-unity-catalog`, `databricks-dbsql`).
@@ -47,7 +51,8 @@ configured from an already-known `workspace_id` — avoiding the classic
 
 ```
 terraform/
-  modules/{workspace,unity_catalog,sql_warehouse}/   # reusable, parameterized
+  modules/{workspace,uc_storage,unity_catalog,sql_warehouse}/  # reusable, parameterized
+                 # uc_storage = access connector + ADLS Gen2 + role (catalog managed location)
   live/
     10-infra/      # azurerm: RG + workspace        (state: .../10-infra.tfstate)
     20-platform/   # databricks: UC + warehouse     (state: .../20-platform.tfstate)
@@ -67,7 +72,11 @@ docs/INTERVIEW.md        # talking points mapped to sources  ← read this
 - Terraform ≥ 1.7, Databricks CLI, `az` CLI, `uv` (all installed in this repo's setup)
 - An Azure subscription + permission to create resource groups & workspaces
 - A Unity Catalog metastore assigned to the workspace's region (platform-team owned;
-  this repo creates the *catalog* downward, not the metastore itself)
+  this repo creates the *catalog* downward, not the metastore itself). New Azure
+  workspaces usually auto-provision one.
+- The catalog is created with an explicit **managed location** (an external location
+  backed by the `uc_storage` access connector). This is required on accounts with UC
+  **Default Storage**, where a metastore has no default root.
 
 ## Quickstart (live apply)
 

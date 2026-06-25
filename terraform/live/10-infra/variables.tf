@@ -25,6 +25,11 @@ variable "sku" {
   default     = "premium"
 }
 
+variable "uc_storage_account_name" {
+  description = "ADLS Gen2 storage account for the Unity Catalog managed location (globally unique, 3-24 lowercase alphanumeric)."
+  type        = string
+}
+
 variable "tags" {
   description = "Extra tags merged onto every resource."
   type        = map(string)

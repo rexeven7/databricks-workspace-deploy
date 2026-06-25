@@ -34,3 +34,24 @@ variable "data_engineer_group" {
   description = "Group granted day-to-day read/write within the catalog."
   type        = string
 }
+
+# ---- Managed location (required on UC Default Storage accounts) ----
+variable "access_connector_id" {
+  description = "Azure resource ID of the Databricks access connector backing the storage credential."
+  type        = string
+}
+
+variable "storage_credential_name" {
+  description = "Name of the Unity Catalog storage credential."
+  type        = string
+}
+
+variable "external_location_name" {
+  description = "Name of the Unity Catalog external location."
+  type        = string
+}
+
+variable "storage_location_url" {
+  description = "ADLS Gen2 container root (no trailing slash). The catalog's managed location is a subpath of this."
+  type        = string
+}

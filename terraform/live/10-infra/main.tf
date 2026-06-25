@@ -28,3 +28,14 @@ module "workspace" {
   sku                 = var.sku
   tags                = local.common_tags
 }
+
+# Storage + access connector for the Unity Catalog catalog's managed location.
+module "uc_storage" {
+  source = "../../modules/uc_storage"
+
+  access_connector_name = "${var.workspace_name}-uc"
+  storage_account_name  = var.uc_storage_account_name
+  resource_group_name   = azurerm_resource_group.this.name
+  location              = var.location
+  tags                  = local.common_tags
+}

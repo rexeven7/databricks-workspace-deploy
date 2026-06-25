@@ -152,3 +152,33 @@ tools) into the repo, so Claude Code / Cursor can author and operate Databricks
 resources with Databricks' own conventions. In this repo it shaped the bundle
 structure, the job/notebook patterns, and the Unity Catalog / Delta best practices
 cited above.
+
+---
+
+## 7. Proven on Azure — real-world findings
+
+This was deployed and verified on a live Azure subscription (workspace → UC →
+serverless warehouse → bundle job → 21,856-row managed, liquid-clustered table).
+Three snags came up that are worth being able to speak to:
+
+1. **UC Default Storage** — on newer accounts the metastore has no storage root, so
+   `CREATE CATALOG` fails unless you give it a **managed location**. The fix (and the
+   production-correct pattern) is bring-your-own-storage: an Azure **access connector**
+   (managed identity) → **Storage Blob Data Contributor** on an ADLS Gen2 container →
+   a UC **storage credential** + **external location** → the catalog's `storage_root`
+   points beneath it. That's the `uc_storage` module + the external location in
+   `unity_catalog`.
+
+2. **Warehouse ACLs vs UC grants use different identity planes.** SQL warehouse
+   permissions take **workspace** groups (`users`), but Unity Catalog grants require
+   **account-level** principals (`account users`, or an account group / user) —
+   workspace-local groups are rejected. The repo decouples these (`warehouse_user_group`
+   vs `data_engineer_group`).
+
+3. **The access connector's role assignment must propagate** before UC validates the
+   external location. Splitting infra (layer 10) from platform (layer 20) gives that a
+   natural gap; if you ever apply too fast, just re-apply.
+
+**Auth that worked, with zero secrets:** `az login` → the `azurerm` provider, the
+`databricks` provider (`azure_workspace_resource_id` + Azure CLI), and the bundle
+profile (`azure_workspace_resource_id`) all authenticate off the same Azure AD login.

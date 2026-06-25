@@ -26,8 +26,14 @@ variable "admin_group" {
 }
 
 variable "data_engineer_group" {
-  description = "Group granted read/write in the catalog and CAN_USE on the warehouse."
+  description = "Unity Catalog account-level principal granted read/write in the catalog (UC grants require account principals, not workspace groups)."
   type        = string
+}
+
+variable "warehouse_user_group" {
+  description = "Workspace group granted CAN_USE on the SQL warehouse. Warehouse ACLs use workspace groups, which are distinct from UC account principals."
+  type        = string
+  default     = "users"
 }
 
 # ---- SQL warehouse ----

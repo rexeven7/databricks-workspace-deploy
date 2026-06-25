@@ -32,6 +32,12 @@ module "unity_catalog" {
   environment         = var.environment
   admin_group         = var.admin_group
   data_engineer_group = var.data_engineer_group
+
+  # Managed location, sourced from layer 10 (access connector + ADLS Gen2).
+  access_connector_id     = data.terraform_remote_state.infra.outputs.uc_access_connector_id
+  storage_location_url    = data.terraform_remote_state.infra.outputs.uc_storage_url
+  storage_credential_name = "${var.environment}-uc-credential"
+  external_location_name  = "${var.environment}-uc-external-location"
 }
 
 module "sql_warehouse" {
@@ -39,6 +45,6 @@ module "sql_warehouse" {
 
   warehouse_name      = var.warehouse_name
   cluster_size        = var.warehouse_size
-  data_engineer_group = var.data_engineer_group
+  data_engineer_group = var.warehouse_user_group # workspace group for the warehouse ACL
   tags                = local.common_tags
 }

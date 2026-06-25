@@ -8,8 +8,10 @@ override_data {
   target = data.terraform_remote_state.infra
   values = {
     outputs = {
-      workspace_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-databricks-dev/providers/Microsoft.Databricks/workspaces/dbw-demo-dev"
-      workspace_url = "https://adb-1234567890.0.azuredatabricks.net"
+      workspace_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-databricks-dev/providers/Microsoft.Databricks/workspaces/dbw-demo-dev"
+      workspace_url          = "https://adb-1234567890.0.azuredatabricks.net"
+      uc_access_connector_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-databricks-dev/providers/Microsoft.Databricks/accessConnectors/dbw-demo-dev-uc"
+      uc_storage_url         = "abfss://ucdata@stdbxucdev0001.dfs.core.windows.net"
     }
   }
 }

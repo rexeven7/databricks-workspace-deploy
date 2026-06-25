@@ -6,10 +6,11 @@
 mock_provider "azurerm" {}
 
 variables {
-  environment         = "dev"
-  location            = "eastus2"
-  resource_group_name = "rg-databricks-dev"
-  workspace_name      = "dbw-demo-dev"
+  environment             = "dev"
+  location                = "eastus2"
+  resource_group_name     = "rg-databricks-dev"
+  workspace_name          = "dbw-demo-dev"
+  uc_storage_account_name = "stdbxucdev0001"
 }
 
 run "premium_sku_is_default" {

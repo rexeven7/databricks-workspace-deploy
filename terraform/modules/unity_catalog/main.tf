@@ -7,6 +7,25 @@ terraform {
   }
 }
 
+# Storage credential wraps the Azure access connector's managed identity so UC
+# can authenticate to the storage account.
+resource "databricks_storage_credential" "this" {
+  name    = var.storage_credential_name
+  comment = "Managed by Terraform."
+  azure_managed_identity {
+    access_connector_id = var.access_connector_id
+  }
+}
+
+# External location registers the container path with UC, governed by the
+# credential above. The catalog's managed location lives beneath it.
+resource "databricks_external_location" "this" {
+  name            = var.external_location_name
+  url             = "${var.storage_location_url}/"
+  credential_name = databricks_storage_credential.this.name
+  comment         = "Managed by Terraform."
+}
+
 # A catalog is the top of the Unity Catalog three-level namespace
 # (catalog.schema.table). Best practice (ai-dev-kit databricks-dbsql skill):
 # isolate ENVIRONMENTS at the catalog level and business DOMAINS at the schema
@@ -16,9 +35,15 @@ resource "databricks_catalog" "this" {
   comment        = var.catalog_comment
   isolation_mode = "ISOLATED" # bound only to workspaces you explicitly grant, not every workspace on the metastore
 
+  # Explicit managed location (required on UC Default Storage accounts). Lives as
+  # a subpath of the external location registered above.
+  storage_root = "${var.storage_location_url}/${var.catalog_name}"
+
   properties = {
     environment = var.environment
   }
+
+  depends_on = [databricks_external_location.this]
 }
 
 resource "databricks_schema" "this" {
