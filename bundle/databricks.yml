@@ -1,0 +1,42 @@
+bundle:
+  name: sample-integration
+
+include:
+  - resources/*.yml
+
+# Parameterized per the ai-dev-kit databricks-bundles skill: catalog, schema and
+# warehouse_id are variables, so the SAME code deploys to dev and prod unchanged.
+# Values are overridden per target below (and can be fed from Terraform outputs).
+variables:
+  catalog:
+    description: Unity Catalog catalog (matches the Terraform-provisioned catalog).
+    default: dev
+  schema:
+    description: Schema within the catalog.
+    default: sales
+  warehouse_id:
+    description: SQL warehouse id from Terraform output `warehouse_id` (layer 20).
+    default: ""
+
+targets:
+  # `mode: development` prefixes resource names with the user, pauses schedules,
+  # and isolates deployments per user - safe, throwaway iteration.
+  dev:
+    default: true
+    mode: development
+    workspace:
+      # Create with: databricks auth login --host <dev-url> -p dbx-dev
+      profile: dbx-dev
+    variables:
+      catalog: dev
+      schema: sales
+
+  # `mode: production` enforces a single shared, non-prefixed deployment and
+  # stricter validation (e.g. no per-user paths).
+  prod:
+    mode: production
+    workspace:
+      profile: dbx-prod
+    variables:
+      catalog: prod
+      schema: sales

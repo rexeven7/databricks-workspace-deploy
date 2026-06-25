@@ -1,0 +1,98 @@
+name: terraform
+
+# WHY this shape: validate + test on every PR (fast, no cloud creds), then
+# plan/apply only after merge to main, gated by a protected GitHub Environment.
+# This is the "review gate before mutating infra" practice.
+on:
+  pull_request:
+    paths: ["terraform/**", ".github/workflows/terraform.yml"]
+  push:
+    branches: [main]
+    paths: ["terraform/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for Azure OIDC (federated, no long-lived secrets)
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # PR gate: fmt + validate + native tests. Runs with NO Azure credentials
+  # because tests mock the providers (see *.tftest.hcl).
+  # ----------------------------------------------------------------------------
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        layer: ["10-infra", "20-platform"]
+    defaults:
+      run:
+        working-directory: terraform/live/${{ matrix.layer }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Format check
+        run: terraform fmt -check -recursive ../../..
+
+      - name: Init (no backend - validation only)
+        run: terraform init -backend=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Test (mocked providers, offline)
+        run: terraform test
+
+  # ----------------------------------------------------------------------------
+  # Apply layer 10 (infra) on merge to main. Gated by the "production" env.
+  # ----------------------------------------------------------------------------
+  apply-infra:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: terraform/live/10-infra
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - run: terraform init -backend-config=env/prod.backend.hcl
+      - run: terraform apply -auto-approve -var-file=env/prod.tfvars
+
+  # ----------------------------------------------------------------------------
+  # Apply layer 20 (platform) after infra. Same OIDC auth; depends on infra.
+  # ----------------------------------------------------------------------------
+  apply-platform:
+    if: github.ref == 'refs/heads/main'
+    needs: apply-infra
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: terraform/live/20-platform
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - run: terraform init -backend-config=env/prod.backend.hcl
+      - run: terraform apply -auto-approve -var-file=env/prod.tfvars

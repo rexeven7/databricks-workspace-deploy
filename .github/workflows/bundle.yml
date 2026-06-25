@@ -1,0 +1,43 @@
+name: bundle
+
+# Asset Bundle CI: validate on PR, deploy on merge. Auth uses a Databricks
+# service principal (OAuth M2M) - host + client id/secret stored as GitHub
+# secrets, no personal access tokens.
+on:
+  pull_request:
+    paths: ["bundle/**", ".github/workflows/bundle.yml"]
+  push:
+    branches: [main]
+    paths: ["bundle/**"]
+  workflow_dispatch:
+
+env:
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bundle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Validate (dev target)
+        run: databricks bundle validate -t dev
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: bundle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Deploy (prod target)
+        run: databricks bundle deploy -t prod

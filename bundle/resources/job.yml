@@ -1,0 +1,29 @@
+resources:
+  jobs:
+    sample_ingest:
+      # [dev ...] / [prod ...] prefix comes from bundle.target (databricks-bundles skill).
+      name: "[${bundle.target}] sample-ingest"
+
+      # Job-level parameters are passed to notebook tasks as widgets automatically.
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+
+      tasks:
+        - task_key: ingest_sample
+          # No cluster block => SERVERLESS compute (databricks-jobs skill).
+          # Path is ../src because this file lives in resources/ (path-resolution rule).
+          notebook_task:
+            notebook_path: ../src/ingest_sample.py
+
+      # Alert engineers on failure only (avoid noise on every run).
+      email_notifications:
+        on_failure:
+          - data-platform@example.com
+
+      # Cannot modify the "admins" group on jobs; grant a real custom group.
+      permissions:
+        - level: CAN_VIEW
+          group_name: data-engineers

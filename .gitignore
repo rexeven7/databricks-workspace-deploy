@@ -1,0 +1,43 @@
+# ----- Terraform -----
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars.local
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl.bak
+
+# ----- Databricks -----
+.databricks/
+**/.databricks/*
+*.pyc
+__pycache__/
+
+# ----- Secrets / local config -----
+*.env
+.env
+*.pem
+*.key
+
+# ----- Claude Code local config -----
+.claude/settings.local.json
+
+# ----- ai-dev-kit (machine-specific) -----
+# Skills (.claude/skills) ARE committed - they travel with the repo.
+# These are local-only: .mcp.json hardcodes this machine's runtime path, and
+# .ai-dev-kit/ is installer state. Regenerate on a new machine by re-running the
+# ai-dev-kit installer.
+.mcp.json
+.ai-dev-kit/
+
+# ----- Editor / OS -----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
