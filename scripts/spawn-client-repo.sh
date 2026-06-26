@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 # Create a new client repo from this template, wire OIDC, and trigger first deploy.
 #
-# Run from the TEMPLATE repo (Cursor control plane). Operator creds stay in Cursor.
-# Client-specific names live in the NEW repo only — never committed to template main.
-#
-# Required: CLIENT_SLUG, GH_TEMPLATE_REPO, BOOTSTRAP_*, GH_TOKEN, STATE_STORAGE_ACCOUNT_NAME
-# Optional: PROPOSAL_FILE, CLIENT_REPO_NAME, DEPLOY_ON_GO (default true), SCHEMA_NAME
+# Order: create repo → bootstrap (secrets/OIDC) → seed content → deploy
+# Bootstrap must succeed before deploy is dispatched.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -18,6 +15,7 @@ bash "$SCRIPT_DIR/spawn-client-validate-env.sh"
 : "${ADMIN_GROUP:=account users}"
 : "${DATA_ENGINEER_GROUP:=account users}"
 : "${SCHEMA_NAME:=sales}"
+: "${SEED_SKIP_ON_FAILURE:=true}"
 
 CLIENT_REPO_NAME="${CLIENT_REPO_NAME:-${CLIENT_SLUG}-databricks}"
 GH_REPO="${GH_ORG}/${CLIENT_REPO_NAME}"
@@ -25,10 +23,11 @@ sa_suffix="$(echo "$CLIENT_SLUG" | cut -c1-18)"
 
 export GH_TOKEN
 log() { printf '%s\n' "$*"; }
+warn() { printf 'WARN: %s\n' "$*" >&2; }
 
 create_repo_if_missing() {
   if gh repo view "$GH_REPO" &>/dev/null; then
-    log "Repository already exists: $GH_REPO (continuing with bootstrap)"
+    log "Repository already exists: $GH_REPO (continuing)"
     return 0
   fi
   log "Creating repository from template: $GH_TEMPLATE_REPO → $GH_REPO"
@@ -39,24 +38,55 @@ create_repo_if_missing() {
     --disable-wiki \
     --disable-issues
   log "Waiting for template generation..."
-  sleep 5
+  sleep 8
+}
+
+bootstrap_client_repo() {
+  export GH_REPO
+  export WORKSPACE_NAME="dbw-${CLIENT_SLUG}"
+  export RESOURCE_GROUP_NAME="rg-dbx-${CLIENT_SLUG}"
+  export UC_STORAGE_ACCOUNT_NAME="stdbx${sa_suffix}"
+  export CATALOG_NAME="${CLIENT_SLUG}"
+  export WAREHOUSE_NAME="wh-${CLIENT_SLUG}"
+
+  log "Bootstrapping GitHub + OIDC for $GH_REPO"
+  bash "$SCRIPT_DIR/bootstrap-platform.sh"
+}
+
+verify_client_secrets() {
+  log "Verifying GitHub secrets on $GH_REPO ..."
+  for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+    if ! gh secret list -R "$GH_REPO" | awk '{print $1}' | grep -qx "$name"; then
+      err_msg="Missing GitHub secret $name on $GH_REPO"
+      log "ERROR: $err_msg"
+      return 1
+    fi
+    ok_msg="ok: $name"
+    log "$ok_msg"
+  done
 }
 
 seed_client_repo() {
   local tmpdir repo_dir
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' RETURN
   repo_dir="$tmpdir/client-repo"
 
-  log "Cloning $GH_REPO to seed client-specific files..."
-  git -c "http.extraHeader=AUTHORIZATION: bearer ${GH_TOKEN}" \
-    clone --depth 1 "https://github.com/${GH_REPO}.git" "$repo_dir"
+  log "Cloning $GH_REPO to seed client-specific files (via gh)..."
+  if ! gh repo clone "$GH_REPO" "$repo_dir" -- --depth 1; then
+    if [ "$SEED_SKIP_ON_FAILURE" = "true" ]; then
+      warn "Seed clone failed — continuing (bootstrap + deploy still run)."
+      warn "Use a classic PAT with 'repo' scope or fine-grained Contents: read/write on all repositories."
+      rm -rf "$tmpdir"
+      return 0
+    fi
+    rm -rf "$tmpdir"
+    return 1
+  fi
 
   cd "$repo_dir"
   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
   git config user.name "github-actions[bot]"
 
-  # State keys and storage account name for this client (fine in client repo).
   for backend in \
     terraform/live/10-infra/env/prod.backend.hcl \
     terraform/live/20-platform/env/prod.backend.hcl; do
@@ -79,7 +109,7 @@ seed_client_repo() {
   done
 
   mkdir -p docs/architecture-proposals
-  if [ -n "${PROPOSAL_FILE:-}" ]; then
+  if [ -n "${PROPOSAL_FILE:-}" ] && [ -f "$REPO_ROOT/$PROPOSAL_FILE" ]; then
     dest_name="$(basename "$PROPOSAL_FILE")"
     cp "$REPO_ROOT/$PROPOSAL_FILE" "docs/architecture-proposals/$dest_name"
     log "Copied proposal → docs/architecture-proposals/$dest_name"
@@ -97,9 +127,7 @@ Spawned from template [\`${GH_TEMPLATE_REPO}\`](https://github.com/${GH_TEMPLATE
 | State key prefix | \`databricks/${CLIENT_SLUG}/\` |
 | Catalog | \`${CLIENT_SLUG}\` |
 
-Architecture proposal: see \`docs/architecture-proposals/\`.
-
-Deploy: Actions → **deploy** → slug \`${CLIENT_SLUG}\` (or merge to \`main\` after production env vars are set).
+Deploy: Actions → **deploy** → slug \`${CLIENT_SLUG}\`.
 EOF
 
   git add -A
@@ -107,21 +135,13 @@ EOF
     log "No seed changes to commit"
   else
     git commit -m "chore: seed ${CLIENT_SLUG} client repo"
-    git push origin HEAD
-    log "Pushed client seed commit"
+    if git push origin HEAD; then
+      log "Pushed client seed commit"
+    else
+      warn "Seed push failed — repo exists but CLIENT.md/proposal may be missing."
+    fi
   fi
-}
-
-bootstrap_client_repo() {
-  export GH_REPO
-  export WORKSPACE_NAME="dbw-${CLIENT_SLUG}"
-  export RESOURCE_GROUP_NAME="rg-dbx-${CLIENT_SLUG}"
-  export UC_STORAGE_ACCOUNT_NAME="stdbx${sa_suffix}"
-  export CATALOG_NAME="${CLIENT_SLUG}"
-  export WAREHOUSE_NAME="wh-${CLIENT_SLUG}"
-
-  log "Bootstrapping GitHub + OIDC for $GH_REPO"
-  bash "$SCRIPT_DIR/bootstrap-platform.sh"
+  rm -rf "$tmpdir"
 }
 
 trigger_first_deploy() {
@@ -137,8 +157,9 @@ trigger_first_deploy() {
 main() {
   log "=== Spawn client repo: $CLIENT_SLUG ==="
   create_repo_if_missing
-  seed_client_repo
   bootstrap_client_repo
+  verify_client_secrets
+  seed_client_repo
   trigger_first_deploy
   log ""
   log "=== Client repo ready ==="
@@ -146,7 +167,6 @@ main() {
   log "Watch: Actions → deploy (slug ${CLIENT_SLUG})"
   log ""
   log "NEXT: Connect Cursor Cloud Agent to ${GH_REPO} for implementation PRs."
-  log "Template repo (${GH_TEMPLATE_REPO}) stays generic — no client names on main."
 }
 
 main "$@"

@@ -9,6 +9,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/az-cli.sh
+source "$SCRIPT_DIR/lib/az-cli.sh"
+
 bash "$SCRIPT_DIR/bootstrap-validate-env.sh"
 
 : "${AZURE_LOCATION:=eastus2}"
@@ -16,18 +19,37 @@ bash "$SCRIPT_DIR/bootstrap-validate-env.sh"
 : "${STATE_CONTAINER_NAME:=tfstate}"
 : "${GHA_APP_DISPLAY_NAME:=gha-databricks-workspace-deploy}"
 
+# Trim CR/LF from Cursor env (Windows Git Bash).
+for v in BOOTSTRAP_AZURE_CLIENT_ID BOOTSTRAP_AZURE_CLIENT_SECRET BOOTSTRAP_AZURE_TENANT_ID \
+  BOOTSTRAP_AZURE_SUBSCRIPTION_ID GH_REPO STATE_STORAGE_ACCOUNT_NAME; do
+  if [ -n "${!v:-}" ]; then
+    printf -v "$v" '%s' "$(echo "${!v}" | trim_tsv)"
+    export "$v"
+  fi
+done
+
 export GH_TOKEN
 export AZURE_CORE_ONLY_SHOW_ERRORS=true
 
 log() { printf '%s\n' "$*"; }
+err() { printf 'ERROR: %s\n' "$*" >&2; }
 
 az_login_bootstrap() {
   log "Signing in with bootstrap service principal..."
-  az login --service-principal \
+  if ! az login --service-principal \
     -u "$BOOTSTRAP_AZURE_CLIENT_ID" \
     -p "$BOOTSTRAP_AZURE_CLIENT_SECRET" \
-    --tenant "$BOOTSTRAP_AZURE_TENANT_ID" --output none
-  az account set --subscription "$BOOTSTRAP_AZURE_SUBSCRIPTION_ID"
+    --tenant "$BOOTSTRAP_AZURE_TENANT_ID" --output none 2>/dev/null; then
+    err "Service principal login failed — check BOOTSTRAP_AZURE_CLIENT_ID/SECRET/TENANT_ID"
+    exit 1
+  fi
+  if ! az account set --subscription "$BOOTSTRAP_AZURE_SUBSCRIPTION_ID" --output none 2>/dev/null; then
+    err "No subscription access for $BOOTSTRAP_AZURE_SUBSCRIPTION_ID"
+    err "The operator SP needs Owner on this subscription."
+    err "Fix locally: APP_ID=$BOOTSTRAP_AZURE_CLIENT_ID SUB_ID=$BOOTSTRAP_AZURE_SUBSCRIPTION_ID bash scripts/assign-operator-role.sh"
+    exit 1
+  fi
+  log "Azure context: $(az account show --query name -o tsv | trim_tsv)"
 }
 
 ensure_gha_app() {
@@ -43,23 +65,19 @@ ensure_gha_app() {
     az ad sp create --id "$APP_ID" --output none 2>/dev/null || true
   fi
   export APP_ID
-  SP_OID="$(az ad sp show --id "$APP_ID" --query id -o tsv)"
+  SP_OID="$(az_tsv ad sp show --id "$APP_ID" --query id)"
   export SP_OID
   log "CI application id (GitHub AZURE_CLIENT_ID): $APP_ID"
 }
 
 assign_role_if_missing() {
   local role="$1" scope="$2"
-  if az role assignment list --assignee "$SP_OID" --scope "$scope" --role "$role" --query "[0].id" -o tsv 2>/dev/null | grep -q .; then
+  if az role assignment list --assignee "$SP_OID" --scope "$scope" --role "$role" \
+    --query "[0].id" -o tsv 2>/dev/null | trim_tsv | grep -q .; then
     log "Role $role already assigned on scope (skipping)"
   else
     log "Assigning $role on $scope"
-    az role assignment create \
-      --assignee-object-id "$SP_OID" \
-      --assignee-principal-type ServicePrincipal \
-      --role "$role" \
-      --scope "$scope" \
-      --output none
+    assign_sp_role "$role" "$scope" "$APP_ID" "$SP_OID"
   fi
 }
 
@@ -110,7 +128,7 @@ ensure_state_storage() {
       --auth-mode login \
       --output none
   fi
-  STATE_SA_ID="$(az storage account show -n "$STATE_STORAGE_ACCOUNT_NAME" -g "$STATE_RESOURCE_GROUP_NAME" --query id -o tsv)"
+  STATE_SA_ID="$(az_tsv storage account show -n "$STATE_STORAGE_ACCOUNT_NAME" -g "$STATE_RESOURCE_GROUP_NAME" --query id)"
   assign_role_if_missing "Storage Blob Data Contributor" "$STATE_SA_ID"
 }
 
