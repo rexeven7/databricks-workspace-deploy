@@ -66,7 +66,27 @@ Details: [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) Step 0–1.
 | `STATE_STORAGE_ACCOUNT_NAME` | `sttfdbxyourname01` | Shared state SA across clients |
 | `AZURE_LOCATION` | `eastus2` | Optional |
 
-`GH_TOKEN` needs: **repo** (admin), **workflow**, ability to **create repos from template**.
+`GH_TOKEN` — use a **classic PAT** with scope **`repo`** (simplest), or fine-grained with:
+
+| Permission | Access |
+|------------|--------|
+| Repository access | **All repositories** (required for newly created client repos) |
+| Contents | Read and write |
+| Actions | Read and write |
+| Administration | Read and write |
+| Secrets | Read and write |
+| Variables | Read and write |
+| Workflows | Read and write |
+
+Fine-grained tokens scoped to **only** the template repo cannot clone/push to `meridian-databricks` after creation.
+
+### 4. Verify before GO (run in Cursor or locally with same env)
+
+```bash
+bash scripts/verify-cursor-operator.sh
+```
+
+All checks must pass before `spawn-client-repo.sh`.
 
 ---
 
@@ -165,12 +185,39 @@ bash scripts/spawn-client-repo.sh
 
 | Symptom | Fix |
 |---------|-----|
-| **Agent opened a PR instead of spawning** | Say **GO** explicitly; push latest `main` (skills + `AGENTS.md`); prompt: "do not open a PR — run spawn-client-repo.sh" |
+| **`No subscriptions found` on bootstrap** | Operator SP has no role on the sub. On your laptop: `APP_ID=<operator-app-id> SUB_ID=655e8413-... bash scripts/assign-operator-role.sh` then update Cursor secrets if you rotated the secret |
+| **Deploy: missing client-id at azure/login** | Bootstrap never completed — rerun spawn after operator fix; check `gh secret list -R rexeven7/meridian-databricks` |
+| **403 on git clone/push to new repo** | `GH_TOKEN` too narrow — use classic **`repo`** PAT or fine-grained **All repositories** + Contents write |
+| **Agent opened a PR instead of spawning** | Say **GO** explicitly; push latest `main`; prompt: "do not open a PR — run spawn-client-repo.sh" |
 | `Template not found` | Enable **Template repository** on this repo |
-| `Resource not accessible` | `GH_TOKEN` needs repo create + admin on org/user |
-| Federated credential limit | Entra apps allow many federated creds; names are per-repo |
-| Storage account name conflict on deploy | Slug drives `stdbx<slug>` — pick a different slug |
-| Repo already exists | Script re-bootstraps and can re-dispatch deploy |
+| Repo already exists (partial GO) | Rerun: `CLIENT_SLUG=meridian bash scripts/spawn-client-repo.sh` — idempotent bootstrap + redeploy |
+
+### Repair Meridian (repo exists, deploy failed)
+
+1. **Fix operator SP** (local, `az login` as you):
+
+```bash
+APP_ID=1477e857-d525-4cf0-95a2-06dd832e4d38 \
+SUB_ID=655e8413-507f-4d8e-afea-68f3d873fd48 \
+bash scripts/assign-operator-role.sh
+```
+
+2. **Fix GH_TOKEN** — create classic PAT with `repo` scope; update Cursor secret.
+
+3. **Verify** (with secrets exported or in Cursor):
+
+```bash
+bash scripts/verify-cursor-operator.sh
+```
+
+4. **Rerun spawn** (bootstraps secrets + redeploys; repo already exists):
+
+```bash
+export CLIENT_SLUG=meridian
+export GH_ORG=rexeven7
+export GH_TEMPLATE_REPO=rexeven7/databricks-workspace-deploy
+bash scripts/spawn-client-repo.sh
+```
 
 ---
 

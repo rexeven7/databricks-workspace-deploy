@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Terraform 1.9.8
-curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
   | sudo tee /etc/apt/sources.list.d/hashicorp.list
 
@@ -19,5 +19,9 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githu
 sudo apt-get update
 sudo apt-get install -y terraform=1.9.8-* gh
 
-# Databricks CLI
-curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+# Databricks CLI (installs to /usr/local/bin, which requires root).
+# setup-cli refuses to overwrite an existing binary, so only install when missing
+# to keep this script idempotent across cloud-agent session startups.
+if ! command -v databricks >/dev/null 2>&1; then
+  curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sudo sh
+fi

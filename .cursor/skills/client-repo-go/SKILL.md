@@ -36,6 +36,7 @@ If missing, tell user to complete [PLATFORM-BOOTSTRAP.md](../../../docs/PLATFORM
 ## Execute (mandatory commands)
 
 ```bash
+bash scripts/verify-cursor-operator.sh
 export CLIENT_SLUG="<slug-from-user>"
 export PROPOSAL_FILE="docs/architecture-proposals/<file>.md"   # if draft exists locally
 bash scripts/spawn-client-validate-env.sh
