@@ -5,7 +5,8 @@
 #   sandbox  — workflow_dispatch with deployment_slug (ephemeral interview deploy)
 #   production — merge to main or dispatch without slug (GitHub Environment vars)
 #
-# Writes shell assignments to stdout; caller should: eval "$(.github/scripts/resolve-deployment.sh)"
+# Writes KEY=VALUE lines to stdout. In CI, pipe through load-deployment-env.sh
+# (not raw >> GITHUB_ENV) so values with spaces (e.g. account users) are preserved.
 
 set -euo pipefail
 

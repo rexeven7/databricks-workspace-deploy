@@ -51,6 +51,11 @@ jobs:
       - name: Test (mocked providers, offline)
         run: terraform test
 
+      - name: Validate deployment env resolver (offline)
+        if: matrix.layer == '20-platform'
+        working-directory: ${{ github.workspace }}
+        run: bash .github/scripts/validate-resolve-deployment.sh
+
   plan-infra:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     needs: [validate]
@@ -83,10 +88,7 @@ jobs:
           terraform_version: "1.9.8"
 
       - name: Resolve production deployment inputs
-        run: |
-          while IFS= read -r line; do
-            echo "$line" >> "$GITHUB_ENV"
-          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+        run: bash ../../../.github/scripts/load-deployment-env.sh
 
       - name: Init backend (AAD)
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
@@ -134,10 +136,7 @@ jobs:
           terraform_version: "1.9.8"
 
       - name: Resolve production deployment inputs
-        run: |
-          while IFS= read -r line; do
-            echo "$line" >> "$GITHUB_ENV"
-          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+        run: bash ../../../.github/scripts/load-deployment-env.sh
 
       - name: Init backend (AAD)
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
@@ -190,9 +189,7 @@ jobs:
 
       - name: Resolve deployment inputs
         run: |
-          while IFS= read -r line; do
-            echo "$line" >> "$GITHUB_ENV"
-          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+          bash ../../../.github/scripts/load-deployment-env.sh
           echo "Deploying in **$DEPLOYMENT_MODE** mode" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Init backend (AAD)
@@ -234,10 +231,7 @@ jobs:
           terraform_version: "1.9.8"
 
       - name: Resolve deployment inputs
-        run: |
-          while IFS= read -r line; do
-            echo "$line" >> "$GITHUB_ENV"
-          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+        run: bash ../../../.github/scripts/load-deployment-env.sh
 
       - name: Init backend (AAD)
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"

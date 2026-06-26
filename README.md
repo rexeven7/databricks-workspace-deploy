@@ -113,8 +113,8 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 ## CI/CD
 
-- **PR** → `terraform fmt/validate/test` (mocked) + **`terraform plan`** (OIDC) +
-  `bundle validate` (needs a live workspace — see [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md)).
+- **PR** → `terraform fmt/validate/test` (mocked) + **resolve-deployment env test** +
+  **`terraform plan`** (OIDC) + `bundle validate` (needs a live workspace).
 - **Merge to `main`** → `terraform apply` then `bundle deploy` (production Environment vars).
 - **Manual `deploy` workflow** → ephemeral sandbox from a slug (interview demos; no commits).
 
