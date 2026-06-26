@@ -93,9 +93,15 @@ Optional: user approves the protected `production` environment before apply.
 
 ## Tooling
 
-Terraform `1.9.8` (matches CI), the Databricks CLI, and `uv` are installed in the
-cloud agent VM via `.cursor/environment.json`. `terraform init` without
-`-backend=false` needs Azure creds — use offline init for validation only.
+Terraform `1.9.8` (matches CI), the Databricks CLI, the Azure CLI, and GitHub CLI
+are installed in the cloud agent VM via `.cursor/environment.json` →
+`scripts/cursor-cloud-install.sh`. `uv` is **not** installed by that script and is
+not needed for the offline validation flow (there are no Python dependency files;
+the bundle notebook runs on Databricks serverless, not locally). `terraform init`
+without `-backend=false` needs Azure creds — use offline init for validation only.
+
+- The install script installs the Databricks CLI to `/usr/local/bin` (needs root)
+  and is idempotent, so it is safe to re-run on every cloud-agent session startup.
 
 - `terraform init` adds a platform-specific `h1:` hash to tracked
   `.terraform.lock.hcl` files. That is a local side effect — do **not** commit it
