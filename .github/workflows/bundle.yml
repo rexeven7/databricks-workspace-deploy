@@ -7,7 +7,9 @@ on:
     paths: ["bundle/**", ".github/workflows/bundle.yml"]
   push:
     branches: [main]
-    paths: ["bundle/**"]
+    paths:
+      - bundle/**
+      - .github/workflows/bundle.yml
   workflow_dispatch:
     inputs:
       target:

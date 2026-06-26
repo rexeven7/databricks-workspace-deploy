@@ -6,7 +6,11 @@ on:
     paths: ["terraform/**", ".github/workflows/terraform.yml", ".github/scripts/**"]
   push:
     branches: [main]
-    paths: ["terraform/**"]
+    paths:
+      - terraform/**
+      - .github/workflows/terraform.yml
+      - .github/workflows/deploy.yml
+      - .github/scripts/**
   workflow_dispatch:
     inputs:
       deployment_slug:
@@ -25,7 +29,29 @@ env:
   TF_IN_AUTOMATION: "true"
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      terraform: ${{ steps.set.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            terraform:
+              - 'terraform/**'
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "terraform=${{ steps.filter.outputs.terraform }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "terraform=true" >> "$GITHUB_OUTPUT"
+          fi
+
   validate:
+    needs: [changes]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -154,8 +180,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   apply-infra:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    needs: [validate]
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.ref == 'refs/heads/main' && needs.changes.outputs.terraform == 'true')
+    needs: [changes, validate]
     runs-on: ubuntu-latest
     environment: production
     defaults:
@@ -199,8 +227,10 @@ jobs:
         run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
 
   apply-platform:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    needs: [apply-infra]
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.ref == 'refs/heads/main' && needs.changes.outputs.terraform == 'true')
+    needs: [changes, apply-infra]
     runs-on: ubuntu-latest
     environment: production
     defaults:
