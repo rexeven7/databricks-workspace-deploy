@@ -43,6 +43,11 @@ jobs:
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: production
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     steps:
       - uses: actions/checkout@v5
       - uses: azure/login@v3
