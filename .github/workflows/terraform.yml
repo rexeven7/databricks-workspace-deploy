@@ -16,7 +16,7 @@ on:
       deployment_slug:
         description: >-
           Optional sandbox slug (ephemeral names/state). Leave empty for production.
-          Prefer the "deploy" workflow for interview sandboxes.
+          Prefer the "deploy" workflow for slug sandboxes.
         required: false
         type: string
       bundle_only:

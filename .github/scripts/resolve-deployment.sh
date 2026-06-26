@@ -2,7 +2,7 @@
 # Resolve Terraform / bundle inputs for CI.
 #
 # Modes:
-#   sandbox  — workflow_dispatch with deployment_slug (ephemeral interview deploy)
+#   sandbox  — workflow_dispatch with deployment_slug (ephemeral deploy)
 #   production — merge to main or dispatch without slug (GitHub Environment vars)
 #
 # Writes KEY=VALUE lines to stdout. In CI, pipe through load-deployment-env.sh

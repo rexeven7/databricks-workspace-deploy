@@ -36,7 +36,7 @@ export GITHUB_ENV="$tmp_env"
 export GITHUB_EVENT_NAME="push"
 export INPUT_DEPLOYMENT_SLUG=""
 export VAR_STATE_RESOURCE_GROUP_NAME="rg-tfstate"
-export VAR_STATE_STORAGE_ACCOUNT_NAME="sttfdbxrexeven701"
+export VAR_STATE_STORAGE_ACCOUNT_NAME="sttfstatedbxdemo"
 export VAR_ADMIN_GROUP="account users"
 export VAR_DATA_ENGINEER_GROUP="account users"
 

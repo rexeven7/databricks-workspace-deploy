@@ -21,7 +21,7 @@ with SDP, metric view, dashboard, and Genie"*:
 
 1. **Acknowledge scope** in one paragraph (platform + pipelines + consumption layer).
 2. **Read** (before proposing):
-   - `docs/INTERVIEW.md` — platform vs application split
+   - `docs/ARCHITECTURE.md` — platform vs application split
    - `AGENTS.md` — agent boundaries
    - `.cursor/skills/databricks-bundles/SKILL.md`
    - `.cursor/skills/databricks-spark-declarative-pipelines/SKILL.md`
@@ -95,7 +95,7 @@ flowchart TB
 
 ### 1.4 Best-practice callouts (cite ai-dev-kit)
 
-Always mention applicable practices from `docs/INTERVIEW.md` §2, e.g.:
+Always mention applicable practices from `docs/ARCHITECTURE.md` §2, e.g.:
 
 - Two Terraform layers + separate state (10-infra / 20-platform)
 - Catalog = environment boundary; schema = domain (bronze/silver/gold or sales)
@@ -155,8 +155,9 @@ Use **AskQuestion** when available; otherwise numbered list. Group by theme.
 1. **Workspace topology**: Two physical workspaces (dev + prod) vs one workspace with dev/prod **catalogs**? (Cost vs isolation trade-off.)
 2. **Azure**: Region(s), one subscription or dev/prod subscriptions?
 3. **Identity**: Entra groups for admins vs engineers (`account users` ok for demo only?)
-4. **GitHub**: Repo strategy — fork this template vs new repo; OIDC bootstrap done or agent documents DEMO-SETUP?
-5. **Naming**: Client slug for state keys and resources (e.g. `hike2` → `dbw-hike2-dev`, storage account uniqueness).
+4. **GitHub**: For greenfield clients → **new repo from template on GO** (see
+   `client-repo-go` skill). Template repo stays generic; client repo gets names + proposal.
+5. **Naming**: Client slug for resources and repo (e.g. `meridian` → `meridian-databricks`, `dbw-meridian`).
 
 ### Should-have (shape the medallion demo)
 
@@ -172,23 +173,39 @@ Use **AskQuestion** when available; otherwise numbered list. Group by theme.
 12. **Alerts**: SQL alert on pipeline freshness or row-count anomaly?
 13. **CI**: Run full SDP on every deploy or notebook smoke test only (cost/time)?
 
-### Defaults when user says "demo / interview"
+### Defaults when user says "demo" or "use defaults"
 
 - Region: `eastus2`
-- Two catalogs on **one** prod workspace + sandbox slug for throwaway (matches this repo)
+- One workspace + catalog per slug (spawn creates dedicated client repo)
 - `account users` for grants
 - `samples.nyctaxi.trips` or synthetic sales data
 - Serverless everywhere
 - Metric view: order/trip count + revenue measures
 - Genie over gold table + metric view
 
-## Phase 3 — After approval
+## Phase 3 — Proposal review (before GO)
 
-1. Update the proposal file: `status: approved`, decisions filled, approval checklist checked.
-2. Summarize **decisions** in PR description; link the proposal path.
-3. Implement **one PR slice** at a time; run offline Terraform tests per `AGENTS.md`.
-4. Open PR with test plan referencing CI jobs (`terraform plan`, `bundle validate`).
-5. Babysit until green; tell user to merge or run `deploy` workflow with slug.
+1. Present architecture in chat; write proposal file under `docs/architecture-proposals/`.
+2. **On the template repo:** keep client-specific proposal **off `main`** until GO
+   (working tree, draft branch, or unmerged PR). The template stays a neutral showcase.
+3. When user approves, set proposal `status: approved` in the file (can happen at GO time).
+
+## Phase 4 — GO (spawn client repo + deploy)
+
+When the user says **GO** (or "create the repo", "deploy it"):
+
+1. Follow `.cursor/skills/client-repo-go/SKILL.md`.
+2. Run `scripts/spawn-client-repo.sh` with `CLIENT_SLUG` and `PROPOSAL_FILE`.
+3. Do **not** run `terraform apply` — deploy is triggered on the **new repo** via GHA.
+4. Tell user to open the client repo and connect Cursor there for implementation PRs.
+
+## Phase 5 — Implementation (on client repo, after deploy)
+
+1. User connects Cursor to the **client repo** (e.g. `meridian-databricks`).
+2. Update proposal `status: approved` in that repo if not done at spawn.
+3. Implement **one PR slice** at a time; offline Terraform tests per `AGENTS.md`.
+4. Open PRs on the **client repo**; CI plans and applies via OIDC.
+5. Babysit until green.
 
 ## Example opener (Hike2)
 
@@ -201,7 +218,7 @@ Use **AskQuestion** when available; otherwise numbered list. Group by theme.
 
 | Do not | Do instead |
 |--------|------------|
-| Commit `hike2` storage account names to `main` | GitHub Environment vars or slug in `resolve-deployment.sh` |
+| Commit `hike2` storage account names to **template** `main` | Spawn client repo; names live there |
 | Put metric views in Terraform | SQL job in bundle |
 | Deploy Genie on legacy TF bundle engine | `engine: direct` + CLI 1.3+ |
 | Single PR for TF + SDP + Genie | Phased PRs per table above |

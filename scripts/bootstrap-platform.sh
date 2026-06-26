@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# One-time platform bootstrap: Entra CI app + OIDC + GitHub secrets/vars + Terraform state.
+# Platform bootstrap: Entra CI app + OIDC + GitHub secrets + shared Terraform state.
 #
-# Uses a temporary BOOTSTRAP_* operator service principal (Cursor Runtime Secrets).
-# Creates a separate GHA CI app for GitHub Actions — bootstrap creds can be deleted after.
+# Uses a persistent BOOTSTRAP_* operator service principal (Cursor Runtime Secrets).
+# Creates a separate GHA CI app — operator configures; CI applies via OIDC.
 #
+# Per-demo stacks use deployment_slug + resolve-deployment.sh — not values committed here.
 # Required env: see scripts/bootstrap-validate-env.sh and docs/PLATFORM-BOOTSTRAP.md
 set -euo pipefail
 
@@ -14,13 +15,6 @@ bash "$SCRIPT_DIR/bootstrap-validate-env.sh"
 : "${STATE_RESOURCE_GROUP_NAME:=rg-tfstate}"
 : "${STATE_CONTAINER_NAME:=tfstate}"
 : "${GHA_APP_DISPLAY_NAME:=gha-databricks-workspace-deploy}"
-: "${WORKSPACE_NAME:=dbw-demo-prod}"
-: "${RESOURCE_GROUP_NAME:=rg-databricks-prod}"
-: "${CATALOG_NAME:=prod}"
-: "${SCHEMA_NAME:=sales}"
-: "${WAREHOUSE_NAME:=wh-demo-prod}"
-: "${ADMIN_GROUP:=account users}"
-: "${DATA_ENGINEER_GROUP:=account users}"
 
 export GH_TOKEN
 export AZURE_CORE_ONLY_SHOW_ERRORS=true
@@ -84,6 +78,13 @@ ensure_federated_credential() {
   fi
 }
 
+ensure_federated_credentials_for_repo() {
+  local fcred_slug
+  fcred_slug="$(echo "$GH_REPO" | tr '[:upper:]' '[:lower:]' | tr '/.' '-')"
+  ensure_federated_credential "${fcred_slug}-env-production" "repo:${GH_REPO}:environment:production"
+  ensure_federated_credential "${fcred_slug}-pull-request" "repo:${GH_REPO}:pull_request"
+}
+
 ensure_state_storage() {
   if ! az group show -n "$STATE_RESOURCE_GROUP_NAME" &>/dev/null; then
     log "Creating resource group $STATE_RESOURCE_GROUP_NAME"
@@ -123,17 +124,28 @@ configure_github() {
   set_env_var() {
     gh variable set "$1" --env production --body "$2" -R "$GH_REPO"
   }
+  # Shared across all slug deploys on this subscription
   set_env_var STATE_RESOURCE_GROUP_NAME "$STATE_RESOURCE_GROUP_NAME"
   set_env_var STATE_STORAGE_ACCOUNT_NAME "$STATE_STORAGE_ACCOUNT_NAME"
   set_env_var AZURE_LOCATION "$AZURE_LOCATION"
-  set_env_var WORKSPACE_NAME "$WORKSPACE_NAME"
-  set_env_var UC_STORAGE_ACCOUNT_NAME "$UC_STORAGE_ACCOUNT_NAME"
-  set_env_var RESOURCE_GROUP_NAME "$RESOURCE_GROUP_NAME"
-  set_env_var CATALOG_NAME "$CATALOG_NAME"
-  set_env_var SCHEMA_NAME "$SCHEMA_NAME"
-  set_env_var WAREHOUSE_NAME "$WAREHOUSE_NAME"
-  set_env_var ADMIN_GROUP "$ADMIN_GROUP"
-  set_env_var DATA_ENGINEER_GROUP "$DATA_ENGINEER_GROUP"
+
+  # Production-mode overrides — only when explicitly set (not hard-wired demo defaults)
+  for pair in \
+    WORKSPACE_NAME:WORKSPACE_NAME \
+    UC_STORAGE_ACCOUNT_NAME:UC_STORAGE_ACCOUNT_NAME \
+    RESOURCE_GROUP_NAME:RESOURCE_GROUP_NAME \
+    CATALOG_NAME:CATALOG_NAME \
+    SCHEMA_NAME:SCHEMA_NAME \
+    WAREHOUSE_NAME:WAREHOUSE_NAME \
+    ADMIN_GROUP:ADMIN_GROUP \
+    DATA_ENGINEER_GROUP:DATA_ENGINEER_GROUP; do
+    var="${pair%%:*}"
+    gh_name="${pair#*:}"
+    if [ -n "${!var:-}" ]; then
+      set_env_var "$gh_name" "${!var}"
+      log "Set production env var: $gh_name"
+    fi
+  done
 }
 
 main() {
@@ -141,8 +153,7 @@ main() {
   az_login_bootstrap
   ensure_gha_app
   assign_role_if_missing "Owner" "/subscriptions/${BOOTSTRAP_AZURE_SUBSCRIPTION_ID}"
-  ensure_federated_credential "gh-env-production" "repo:${GH_REPO}:environment:production"
-  ensure_federated_credential "gh-pull-request" "repo:${GH_REPO}:pull_request"
+  ensure_federated_credentials_for_repo
   ensure_state_storage
   configure_github
   log ""
@@ -151,8 +162,9 @@ main() {
   log "State: ${STATE_RESOURCE_GROUP_NAME} / ${STATE_STORAGE_ACCOUNT_NAME} / ${STATE_CONTAINER_NAME}"
   log "GitHub: secrets + production environment variables configured on $GH_REPO"
   log ""
-  log "NEXT: Remove BOOTSTRAP_* and GH_TOKEN from Cursor Secrets."
-  log "CI deploys via OIDC only. Run deploy workflow or merge to main to create workspace."
+  log "NEXT: Deploy a demo with a slug (names are runtime-only, not committed):"
+  log "  DEPLOYMENT_SLUG=<slug> bash scripts/trigger-demo-deploy.sh"
+  log "Operator BOOTSTRAP_* creds stay in Cursor for future demos."
 }
 
 main "$@"

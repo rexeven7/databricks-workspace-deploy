@@ -22,7 +22,13 @@ require BOOTSTRAP_AZURE_SUBSCRIPTION_ID
 require GH_TOKEN
 require GH_REPO
 require STATE_STORAGE_ACCOUNT_NAME
-require UC_STORAGE_ACCOUNT_NAME
+
+# Optional — only for production-mode GitHub env overrides (slug deploys derive UC storage)
+if [ -z "${UC_STORAGE_ACCOUNT_NAME:-}" ]; then
+  echo "optional (slug deploys): UC_STORAGE_ACCOUNT_NAME"
+else
+  echo "ok: UC_STORAGE_ACCOUNT_NAME"
+fi
 
 # Optional with defaults — report if unset
 for opt in AZURE_LOCATION STATE_RESOURCE_GROUP_NAME GHA_APP_DISPLAY_NAME; do

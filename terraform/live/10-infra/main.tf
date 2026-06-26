@@ -2,7 +2,7 @@
 # Layer 10 - INFRASTRUCTURE (Azure control plane)
 # Owns: resource group + the Databricks workspace. Uses ONLY the azurerm provider.
 # Separated from layer 20 (platform) so cloud-admin-level changes have their own
-# state, blast radius and credentials. See docs/INTERVIEW.md for the rationale.
+# state, blast radius and credentials. See docs/ARCHITECTURE.md for the rationale.
 # =============================================================================
 
 locals {

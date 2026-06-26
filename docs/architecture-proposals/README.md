@@ -5,7 +5,7 @@ The Cursor cloud agent writes these **before** implementation PRs (Option C inta
 
 ## Why this exists
 
-- **Audit trail** — what was agreed, when, and why (interviews, client handoffs).
+- **Audit trail** — what was agreed, when, and why (reviews, client handoffs).
 - **Separation** — proposal PR can land before Terraform/bundle code PRs.
 - **Reusable template** — same structure for every client; `main` stays generic.
 

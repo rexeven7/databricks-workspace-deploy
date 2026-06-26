@@ -84,7 +84,7 @@ flowchart TB
 ### Best practices applied
 
 - Two Terraform layers + separate state per env (`10-infra`, `20-platform`)
-- Platform (TF) vs application (DAB) split per `docs/INTERVIEW.md`
+- Platform (TF) vs application (DAB) split per `docs/ARCHITECTURE.md`
 - Serverless SDP and serverless SQL warehouse
 - Gold: managed Delta + Liquid Clustering
 - Bundle variables: `catalog`, `schema`, `warehouse_id` per target

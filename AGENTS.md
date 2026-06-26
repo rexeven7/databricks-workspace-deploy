@@ -7,33 +7,29 @@ things:
 
 - **Terraform** (`terraform/`) — Azure Databricks workspace + Unity Catalog +
   serverless SQL warehouse, split into two layers (`live/10-infra`,
-  `live/20-platform`). See `README.md` and `docs/INTERVIEW.md`.
+  `live/20-platform`). See `README.md` and `docs/ARCHITECTURE.md`.
 - **Databricks Asset Bundle** (`bundle/`) — a serverless job + notebook.
 
 **Prerequisites (human setup, not the agent by default):** See [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md)
 for Azure OIDC, GitHub secrets/variables, and the protected `production`
 environment. The default agent workflow does **not** need cloud credentials.
 
-**Platform bootstrap (demo):** [docs/PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md) —
-temporary `BOOTSTRAP_*` secrets in Cursor; agent runs `scripts/bootstrap-platform.sh`.
-Delete bootstrap secrets after; CI OIDC handles deploy.
+**Platform operator:** standing `BOOTSTRAP_*` in Cursor on the **template** repo.
+**Greenfield GO:** [docs/CLIENT-REPO-BOOTSTRAP.md](docs/CLIENT-REPO-BOOTSTRAP.md) — spawn new repo + deploy.
 
 ---
 
 ## What the cloud agent should do
 
-0. **Client / greenfield intake** — For requests like a new client workspace, dev+prod,
-   medallion, SDP, metric views, dashboards, or Genie: follow
-   `.cursor/skills/databricks-client-intake/SKILL.md` — propose architecture and ask
-   clarifying questions **before** writing code. **Write the proposal to**
-   `docs/architecture-proposals/<client-slug>-<scope>.md` (from `_TEMPLATE.md`); prefer
-   a proposal-only PR before implementation. See
-   [docs/architecture-proposals/README.md](docs/architecture-proposals/README.md).
-0b. **Platform bootstrap (demo only)** — When the user asks to bootstrap OIDC, GitHub
-   secrets, or state storage: follow `.cursor/skills/platform-bootstrap/SKILL.md` and
-   [docs/PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md). Run
-   `scripts/bootstrap-validate-env.sh` then `scripts/bootstrap-platform.sh` only.
-   Never commit secrets.
+0. **Client intake** — Greenfield requests: follow
+   `.cursor/skills/databricks-client-intake/SKILL.md` — propose architecture, ask
+   questions, write proposal. **Do not commit client names to template `main`.**
+0c. **GO (spawn client repo)** — When user says GO after approving a proposal: follow
+   `.cursor/skills/client-repo-go/SKILL.md` and
+   [docs/CLIENT-REPO-BOOTSTRAP.md](docs/CLIENT-REPO-BOOTSTRAP.md). Run
+   `scripts/spawn-client-repo.sh`. Deploy happens on the **new repo** via GHA.
+0b. **Platform bootstrap / slug demo (template repo only)** — Wire OIDC or quick slug
+   deploy on **this** repo: [PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md).
 1. **Gather parameters in conversation** — region, deployment slug, catalog/schema
    names, feature requests. Do not ask the user to edit tfvars by hand unless they
    prefer it; prefer documenting runtime overrides (GitHub Environment vars or
@@ -61,9 +57,9 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 - **Do not** store or use `ARM_*`, `AZURE_*`, or Databricks secrets for routine PR
   work. CI applies via federated OIDC (see `docs/DEMO-SETUP.md`).
-- **Exception:** one-time **platform bootstrap** when user requests it and Cursor
-  Secrets are set per [PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md) — run bootstrap
-  scripts only; never commit secret values.
+- **Exception:** **demo operator** on the template repo — bootstrap or **GO spawn**
+  per [CLIENT-REPO-BOOTSTRAP.md](docs/CLIENT-REPO-BOOTSTRAP.md); never commit client
+  names to template `main`.
 - **Do not** run `terraform apply`, `terraform plan` (needs backend + Azure), or
   `databricks bundle deploy` unless the user explicitly overrides this policy for
   a local session with their own credentials.
@@ -84,7 +80,7 @@ Tell the user to either:
 
 - **Merge to `main`** — applies production values from the GitHub `production`
   environment (if configured), or
-- **Run the `deploy` workflow** with a `deployment_slug` for an isolated interview
+- **Run the `deploy` workflow** with a `deployment_slug` for an isolated sandbox
   sandbox (recommended for demos).
 
 Optional: user approves the protected `production` environment before apply.

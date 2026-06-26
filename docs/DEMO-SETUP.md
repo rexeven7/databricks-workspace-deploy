@@ -1,38 +1,34 @@
-# Demo & interview setup
+# Platform demo setup
 
-> **Caveat for reviewers and interviewers:** Everything below is **one-time
-> platform setup** on *your* Azure subscription and GitHub repo. The repo on
-> `main` stays a **reusable template** — customer-specific names and state keys
-> are injected at deploy time (GitHub Environment variables or a
-> `workflow_dispatch` slug), not committed to source control. You do this setup
-> once; the live demo is "open Cursor → agent opens a PR → CI plans → you
-> approve → Actions deploys."
+> **Template caveat:** One-time platform setup runs on *your* Azure subscription and
+> GitHub repo. Committed files use **placeholder** names — real values come from GitHub
+> Environment variables, operator bootstrap, or `workflow_dispatch` slugs at deploy time.
 
 ---
 
-## Bootstrap status (this repo)
+## Platform wiring checklist (your instance)
 
-| Step | Status |
+Complete once per **subscription + GitHub repo**. Use
+[PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) with standing Cursor operator secrets, or
+the manual steps below.
+
+| Step | How to verify |
 |---|---|
-| Entra app `gha-databricks-workspace-deploy` | Done — `AZURE_CLIENT_ID` = `327026fe-c20e-4688-a8ca-070602722b73` |
-| OIDC federated credentials (production + PR) | Done |
-| GitHub secrets (`AZURE_*`) | Done |
-| GitHub `production` environment variables (state, location, groups) | Done |
-| State RG `rg-tfstate` + SA `sttfdbxrexeven701` + container `tfstate` | Done |
-| **RBAC for CI service principal** | **You must complete** — see below |
-| `.cursor/skills` (ai-dev-kit data-engineer profile) | Done |
-| First sandbox deploy | Run **deploy** workflow after RBAC |
-| Layer 20 Databricks auth | CI sets `DATABRICKS_AUTH_TYPE=azure-cli` after `azure/login` (needed for UC storage credentials) |
+| Entra CI app + OIDC federated credentials | GitHub secrets `AZURE_*` set |
+| State RG + storage account + `tfstate` container | Bootstrap script or Portal |
+| CI SP **Owner** on subscription | Deploy workflow plan/apply succeeds |
+| CI SP **Storage Blob Data Contributor** on state SA | `terraform init` with OIDC backend |
+| Cursor operator secrets (`BOOTSTRAP_*`, `GH_TOKEN`) | Agent can run bootstrap + trigger deploy |
 
-### Manual RBAC fallback (required if `assign-ci-roles.sh` fails)
+### Manual RBAC fallback (if bootstrap role assignment fails)
 
 Your signed-in user can create resources but may lack permission to assign roles
-(`MissingSubscription` from `az role assignment`). An subscription **Owner** must
+(`MissingSubscription` from `az role assignment`). A subscription **Owner** must
 grant the CI service principal:
 
-1. Azure Portal → **Subscriptions** → *Taylor Farms* → **Access control (IAM)**
+1. Azure Portal → **Subscriptions** → your sandbox sub → **Access control (IAM)**
 2. **Add role assignment** → **Owner** → members → search `gha-databricks-workspace-deploy`
-3. Storage account `sttfdbxrexeven701` → **Access control (IAM)** → **Storage Blob Data Contributor** → same SP
+3. State storage account → **Access control (IAM)** → **Storage Blob Data Contributor** → same SP
 
 Or, from a shell where you have UAA/Owner:
 
@@ -48,7 +44,7 @@ APP_ID="<CI_APP_ID>" SUB_ID="<SUBSCRIPTION_ID>" STATE_SA="<STATE_SA>" bash scrip
 
 | Item | Notes |
 |---|---|
-| Azure subscription | Personal or interview sandbox sub. Contributor alone is **not** enough — the UC storage module creates `azurerm_role_assignment`, so the CI identity needs **Owner** or **Contributor + User Access Administrator**. |
+| Azure subscription | Personal or sandbox sub. Contributor alone is **not** enough — the UC storage module creates `azurerm_role_assignment`, so the CI identity needs **Owner** or **Contributor + User Access Administrator**. |
 | Entra tenant ID | Used as `AZURE_TENANT_ID`. |
 | UC metastore in region | Required for catalog creation. New Azure workspaces usually get one automatically. |
 | Remote state storage | Resource group `rg-tfstate`, storage account (globally unique name), container `tfstate`. Created once; all deployments share it with **different state keys** per slug/environment. |
@@ -73,7 +69,7 @@ These override committed `prod.tfvars` at runtime (`TF_VAR_*`). Names are not se
 | Variable | Example | Purpose |
 |---|---|---|
 | `STATE_RESOURCE_GROUP_NAME` | `rg-tfstate` | State backend RG |
-| `STATE_STORAGE_ACCOUNT_NAME` | `sttfdbxrexeven701` | State storage account |
+| `STATE_STORAGE_ACCOUNT_NAME` | `sttfstatedbxdemo` | State storage account (globally unique — pick yours) |
 | `AZURE_LOCATION` | `eastus2` | Region for sandbox deploys |
 | `WORKSPACE_NAME` | `dbw-demo-prod` | Production workspace (merge-to-main path) |
 | `UC_STORAGE_ACCOUNT_NAME` | `stdbxucprod0001` | UC ADLS account (globally unique) |
@@ -99,14 +95,16 @@ Prefer **OIDC + `DATABRICKS_AUTH_TYPE=azure-cli`** for deploy (no Databricks sec
 
 | Item | Notes |
 |---|---|
-| GitHub repo connected | Cursor dashboard → connect `rexeven7/databricks-workspace-deploy` |
+| GitHub repo connected | Cursor dashboard → connect `<owner>/<repo>` |
 | `.cursor/environment.json` | Committed — installs Terraform + Databricks CLI in the agent VM |
 | **Default: no cloud secrets** | Agent runs offline checks + opens PRs; **GitHub Actions applies** via OIDC |
-| **Platform bootstrap** | One-time demo setup via Cursor Secrets — [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) |
+| **Demo operator** | Standing `BOOTSTRAP_*` + `GH_TOKEN` — spawns client repos on GO |
 | ai-dev-kit skills | `install.ps1 --tools cursor --skills-only --skills-profile data-engineer --silent` → `.cursor/skills/` (committed) |
 
-For OIDC + GitHub secrets + state storage, follow **[PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md)**
-(two service principals: temporary bootstrap SP in Cursor, permanent CI SP in GitHub).
+**Greenfield flow:** intake + proposal on this repo → **GO** spawns a client repo →
+[CLIENT-REPO-BOOTSTRAP.md](CLIENT-REPO-BOOTSTRAP.md).
+
+Slug-only demos on **this** repo (no new repo): [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md).
 
 Legacy manual commands (reference only):
 
@@ -162,7 +160,7 @@ Set `STATE_STORAGE_ACCOUNT_NAME` on the `production` environment to `<STATE_SA>`
 | **terraform** | Manual dispatch, `bundle_only` | Deploy/update bundle and run `sample_ingest` (platform already exists) |
 | **bundle** | PR | `bundle validate` (optional; needs `DATABRICKS_HOST` env var) |
 | **bundle** | Push to `main` (`bundle/**`) | `bundle deploy -t ci` + `sample_ingest` smoke test |
-| **deploy** | Manual (`workflow_dispatch`) | **Interview path:** slug → isolated state + resources → Terraform → bundle + smoke test |
+| **deploy** | Manual (`workflow_dispatch`) | Slug → isolated state + resources → Terraform → bundle + smoke test |
 | **destroy** | Manual (`workflow_dispatch`) | **Demo teardown:** reverse of deploy; optional state purge for clean re-apply |
 
 ### Tear down a demo environment
@@ -172,8 +170,8 @@ Use the **destroy** workflow (not the Azure portal alone — that leaves stale T
 **Sandbox** (same slug as deploy):
 
 1. Actions → **destroy** → Run workflow.
-2. `deployment_slug`: e.g. `interviewjun25` (normalized to alphanumeric).
-3. `confirm`: type the normalized slug exactly (`interviewjun25`).
+2. `deployment_slug`: e.g. `demojun25` (normalized to alphanumeric).
+3. `confirm`: type the normalized slug exactly (`demojun25`).
 4. Leave **purge_state** checked for a clean slate before the next deploy.
 
 **Production demo** (GitHub Environment vars footprint):
@@ -191,9 +189,8 @@ What it does **not** do: remove `rg-tfstate`, Entra OIDC app, or GitHub secrets.
 metadata in the account metastore may need manual cleanup in the account console after workspace
 deletion.
 
-**Not for real client production** — use change-managed destroy outside this template.
-
-Legacy manual destroy (if needed): see interview sandbox section below.
+Legacy manual destroy: use the destroy workflow above; local `terraform destroy` is
+only needed when debugging outside CI.
 
 ### If Terraform ran but the bundle did not (catch-up)
 
@@ -204,33 +201,17 @@ This can happen when platform was applied before bundle deploy was wired into CI
 
 After deploy, CI runs the `sample_ingest` job automatically (populates `prod.sales.trips_curated`).
 
-### Interview sandbox deploy (no commits to `main`)
+### Slug sandbox deploy (no commits to `main`)
 
 1. Actions → **deploy** → Run workflow.
-2. `deployment_slug`: e.g. `interview-jun25` (alphanumeric; drives names + state prefix `databricks/interview-jun25/`).
+2. `deployment_slug`: e.g. `demo-jun25` (alphanumeric; state prefix `databricks/<slug>/`).
 3. Optionally check **run_bundle_job**.
 4. Approve the `production` environment if reviewers are configured.
 5. Watch layer 10 → 20 → bundle complete.
 
-Resources created (example slug `interviewjun25`):
+Example slug `demojun25` creates: `rg-dbx-demojun25`, `dbw-demojun25`, catalog `demojun25`.
 
-- `rg-dbx-interviewjun25`, `dbw-interviewjun25`, `stdbxinterviewjun25`, catalog `interviewjun25`.
-
-Tear down when finished (from a machine with `az login`):
-
-```bash
-cd terraform/live/10-infra
-terraform init -backend-config=resource_group_name=rg-tfstate \
-  -backend-config=storage_account_name=<STATE_SA> \
-  -backend-config=container_name=tfstate \
-  -backend-config=key=databricks/interviewjun25/10-infra.tfstate \
-  -backend-config=use_azuread_auth=true
-terraform destroy -var-file=env/prod.tfvars \
-  -var=resource_group_name=rg-dbx-interviewjun25 \
-  -var=workspace_name=dbw-interviewjun25 \
-  -var=uc_storage_account_name=stdbxinterviewjun25
-# repeat for layer 20, then delete state blobs if desired
-```
+**Not for real client production** — use change-managed destroy outside this template.
 
 ---
 
@@ -258,7 +239,7 @@ Example agent prompt:
 
 ---
 
-## Verify Option B end-to-end
+## Verify end-to-end
 
 1. **PR only:** push a branch with a trivial Terraform comment → green `validate` + `plan-infra` / `plan-platform`.
 2. **Sandbox:** run **deploy** with slug `smoketest01` → confirm workspace + job in Azure/Databricks UI.
@@ -267,22 +248,23 @@ Example agent prompt:
 
 ---
 
-## Multi-customer / consulting reuse
+## Multi-customer reuse
 
 | Pattern | When |
 |---|---|
-| **This repo stays generic on `main`** | Always — modules + example tfvars only |
-| **`workflow_dispatch` slug per demo/client** | Ephemeral sandboxes, interviews |
-| **GitHub Environment per long-lived client** | Same repo, different `vars` + OIDC subject `environment:client-acme` |
-| **Template repo → fork per client** | Long engagements; client owns their repo and secrets |
+| **Template stays generic on `main`** | Always |
+| **CLIENT-REPO GO flow** | New client — spawn dedicated repo ([CLIENT-REPO-BOOTSTRAP.md](CLIENT-REPO-BOOTSTRAP.md)) |
+| **`workflow_dispatch` slug** | Quick throwaway sandbox on the template repo |
+| **GitHub Environment per client** | Same repo, different `vars` + OIDC subject |
 
-Do **not** commit client-specific storage account names or state backends to `main`.
+Do **not** commit client-specific storage account names or state backends to **template** `main`.
 
 ---
 
 ## Related docs
 
-- [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) — safe Cursor/agent OIDC bootstrap
-- [NEXT-STEPS.md](NEXT-STEPS.md) — Option B/C hand-off
-- [INTERVIEW.md](INTERVIEW.md) — talking points and architecture
+- [CLIENT-REPO-BOOTSTRAP.md](CLIENT-REPO-BOOTSTRAP.md) — talk → proposal → GO → new repo + deploy
+- [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) — operator credentials + slug demos on template
+- [NEXT-STEPS.md](NEXT-STEPS.md) — documentation map
+- [ARCHITECTURE.md](ARCHITECTURE.md) — design rationale
 - [AGENTS.md](../AGENTS.md) — what the cloud agent should and should not do

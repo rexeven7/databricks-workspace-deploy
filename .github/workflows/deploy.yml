@@ -1,13 +1,13 @@
 name: deploy
 
-# One-click interview / sandbox deploy: Terraform (10 → 20) then bundle, all via OIDC.
+# One-click sandbox deploy: Terraform (10 → 20) then bundle, all via OIDC.
 # Does not mutate committed tfvars — inputs are resolved at runtime.
 on:
   workflow_dispatch:
     inputs:
       deployment_slug:
         description: >-
-          Unique slug for this deploy (e.g. interview-jun25). Drives resource
+          Unique slug for this deploy (e.g. demo-jun25). Drives resource
           names and a dedicated state prefix under databricks/<slug>/.
         required: true
         type: string

@@ -46,7 +46,7 @@ flowchart TB
 
 ### Best practices applied
 
-<!-- Bullet list with refs to INTERVIEW.md / ai-dev-kit -->
+<!-- Bullet list with refs to ARCHITECTURE.md / ai-dev-kit -->
 
 ## Decisions
 

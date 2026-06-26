@@ -64,7 +64,7 @@ bundle/
   resources/job.yml      # serverless job
   src/ingest_sample.py   # the notebook
 | `.github/workflows/`       # terraform.yml, bundle.yml, deploy.yml, destroy.yml |
-docs/INTERVIEW.md        # talking points mapped to sources  ← read this
+docs/ARCHITECTURE.md     # design rationale mapped to sources
 docs/architecture-proposals/  # client ADRs (Option C intake — agent writes before code)
 ```
 
@@ -118,7 +118,7 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
   **`terraform plan`** (OIDC) + `bundle validate` (needs a live workspace).
 - **Merge to `main`** → `terraform apply` then **`bundle deploy` + `sample_ingest` smoke test** (host/warehouse from Terraform outputs).
 - **Bundle-only changes on `main`** → `bundle.yml` deploys from Terraform state.
-- **Manual `deploy` workflow** → ephemeral sandbox from a slug (interview demos; no commits).
+- **Manual `deploy` workflow** → ephemeral sandbox from a slug (no commits).
 - **Manual `destroy` workflow** → demo/sandbox teardown (reverse deploy + optional state purge).
 - **Catch-up** → Actions → **terraform** → Run workflow → check **bundle_only** if platform already exists.
 
@@ -126,7 +126,8 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 **Greenfield client intake** (architecture proposals before implementation): [docs/architecture-proposals/README.md](docs/architecture-proposals/README.md).
 
-**Demo platform bootstrap** (OIDC + GitHub + state via Cursor agent): [docs/PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md).
+**Greenfield GO (new client repo):** [docs/CLIENT-REPO-BOOTSTRAP.md](docs/CLIENT-REPO-BOOTSTRAP.md).
 
-See [docs/INTERVIEW.md](docs/INTERVIEW.md) for every best practice, *why* it's
-there, and *where* it comes from.
+**Platform operator** (standing Cursor creds): [docs/PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md).
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design rationale and sources.
