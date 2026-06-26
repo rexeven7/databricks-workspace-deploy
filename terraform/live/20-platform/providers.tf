@@ -6,8 +6,9 @@
 # classic "a provider configured from a resource created in the same apply"
 # chicken-and-egg problem that single-config Azure Databricks setups hit.
 provider "databricks" {
+  host                        = data.terraform_remote_state.infra.outputs.workspace_url
   azure_workspace_resource_id = data.terraform_remote_state.infra.outputs.workspace_id
 
-  # Auth: ARM_* env / OIDC in CI, or `az login` locally. The provider exchanges
-  # Azure AD tokens for Databricks tokens automatically - no PATs to store.
+  # Local: `az login` → azure-cli auth (default).
+  # CI: set DATABRICKS_AUTH_TYPE=github-oidc-azure in the workflow (see terraform.yml).
 }

@@ -5,3 +5,4 @@ storage_account_name = "sttfdbxrexeven701"
 container_name       = "tfstate"
 key                  = "databricks/dev/10-infra.tfstate"
 use_azuread_auth     = true
+use_oidc             = true

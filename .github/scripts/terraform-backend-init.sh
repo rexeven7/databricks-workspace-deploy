@@ -7,4 +7,5 @@ terraform init -reconfigure \
   -backend-config="storage_account_name=${BACKEND_STORAGE_ACCOUNT}" \
   -backend-config="container_name=${BACKEND_CONTAINER}" \
   -backend-config="key=${1}" \
-  -backend-config="use_azuread_auth=true"
+  -backend-config="use_azuread_auth=true" \
+  -backend-config="use_oidc=true"

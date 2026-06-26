@@ -22,6 +22,7 @@
 | **RBAC for CI service principal** | **You must complete** — see below |
 | `.cursor/skills` (ai-dev-kit data-engineer profile) | Done |
 | First sandbox deploy | Run **deploy** workflow after RBAC |
+| Layer 20 Databricks OIDC | CI sets `DATABRICKS_AUTH_TYPE=github-oidc-azure`; provider uses `host` from layer 10 remote state |
 
 ### Manual RBAC fallback (required if `assign-ci-roles.sh` fails)
 
