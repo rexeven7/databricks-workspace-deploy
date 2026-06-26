@@ -56,6 +56,8 @@ else
   [ -n "${VAR_RESOURCE_GROUP_NAME:-}" ] && emit "TF_VAR_resource_group_name=${VAR_RESOURCE_GROUP_NAME}"
   [ -n "${VAR_CATALOG_NAME:-}" ] && emit "TF_VAR_catalog_name=${VAR_CATALOG_NAME}"
   [ -n "${VAR_WAREHOUSE_NAME:-}" ] && emit "TF_VAR_warehouse_name=${VAR_WAREHOUSE_NAME}"
+  [ -n "${VAR_ADMIN_GROUP:-}" ] && emit "TF_VAR_admin_group=${VAR_ADMIN_GROUP}"
+  [ -n "${VAR_DATA_ENGINEER_GROUP:-}" ] && emit "TF_VAR_data_engineer_group=${VAR_DATA_ENGINEER_GROUP}"
   emit "TF_VAR_state_resource_group_name=$state_rg"
   emit "TF_VAR_state_storage_account_name=$state_sa"
   emit "TF_VAR_state_container_name=tfstate"

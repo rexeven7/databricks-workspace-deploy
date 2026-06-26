@@ -10,5 +10,7 @@ provider "databricks" {
   azure_workspace_resource_id = data.terraform_remote_state.infra.outputs.workspace_id
 
   # Local: `az login` → azure-cli auth (default).
-  # CI: set DATABRICKS_AUTH_TYPE=github-oidc-azure in the workflow (see terraform.yml).
+  # CI: set DATABRICKS_AUTH_TYPE=azure-cli after azure/login (see terraform.yml).
+  # github-oidc-azure works for most resources but not storage credentials, which
+  # require an ARM-scoped management token that azure-cli auth supplies.
 }
