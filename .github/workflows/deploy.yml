@@ -12,10 +12,10 @@ on:
         required: true
         type: string
       run_bundle_job:
-        description: Run sample_ingest after bundle deploy
+        description: Run sample_ingest after bundle deploy (smoke test)
         required: false
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -140,21 +140,11 @@ jobs:
 
       - uses: databricks/setup-cli@main
 
-      - name: Deploy asset bundle (ci target)
+      - name: Deploy asset bundle and run smoke test
         env:
           DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ needs.apply-platform.outputs.warehouse_id }}
           BUNDLE_CATALOG: ${{ needs.apply-platform.outputs.catalog_name }}
           BUNDLE_SCHEMA: sales
+          BUNDLE_RUN_SAMPLE_INGEST: ${{ inputs.run_bundle_job }}
         run: bash ../.github/scripts/bundle-deploy-ci.sh
-
-      - name: Run sample ingest (optional)
-        if: inputs.run_bundle_job
-        env:
-          DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
-          DATABRICKS_AUTH_TYPE: azure-cli
-        run: |
-          databricks bundle run sample_ingest -t ci \
-            --var="catalog=${{ needs.apply-platform.outputs.catalog_name }}" \
-            --var="schema=sales" \
-            --var="warehouse_id=${{ needs.apply-platform.outputs.warehouse_id }}"

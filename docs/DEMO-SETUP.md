@@ -152,11 +152,11 @@ Set `STATE_STORAGE_ACCOUNT_NAME` on the `production` environment to `<STATE_SA>`
 | Workflow | Trigger | What it does |
 |---|---|---|
 | **terraform** | PR | Offline `fmt` / `validate` / `test` + **cloud `plan`** (OIDC) posted to job summary |
-| **terraform** | Push to `main` (`terraform/**`) | Apply layer 10 → 20, then **bundle deploy** (reads host/warehouse from Terraform outputs) |
-| **terraform** | Manual dispatch, `bundle_only` | Deploy/update bundle only (platform already exists) |
+| **terraform** | Push to `main` (`terraform/**`) | Apply layer 10 → 20, then **bundle deploy + `sample_ingest` smoke test** |
+| **terraform** | Manual dispatch, `bundle_only` | Deploy/update bundle and run `sample_ingest` (platform already exists) |
 | **bundle** | PR | `bundle validate` (optional; needs `DATABRICKS_HOST` env var) |
-| **bundle** | Push to `main` (`bundle/**`) | `bundle deploy -t ci` via Azure CLI (reads Terraform state) |
-| **deploy** | Manual (`workflow_dispatch`) | **Interview path:** slug → isolated state + resources → Terraform → bundle |
+| **bundle** | Push to `main` (`bundle/**`) | `bundle deploy -t ci` + `sample_ingest` smoke test |
+| **deploy** | Manual (`workflow_dispatch`) | **Interview path:** slug → isolated state + resources → Terraform → bundle + smoke test |
 
 ### If Terraform ran but the bundle did not (catch-up)
 
@@ -165,7 +165,7 @@ This can happen when platform was applied before bundle deploy was wired into CI
 1. **Easiest:** merge/push any change under `bundle/**` — `bundle.yml` deploys from Terraform state (no manual vars).
 2. **Or:** Actions → **terraform** → Run workflow → check **bundle_only** → Run.
 
-After deploy, run the `sample_ingest` job from the workspace UI or `databricks bundle run sample_ingest -t ci`.
+After deploy, CI runs the `sample_ingest` job automatically (populates `prod.sales.trips_curated`).
 
 ### Interview sandbox deploy (no commits to `main`)
 

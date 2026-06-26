@@ -23,3 +23,11 @@ databricks bundle deploy -t ci \
   --var="catalog=${BUNDLE_CATALOG}" \
   --var="schema=${BUNDLE_SCHEMA}" \
   --var="warehouse_id=${WAREHOUSE_ID}"
+
+if [[ "${BUNDLE_RUN_SAMPLE_INGEST:-true}" == "true" ]]; then
+  echo "Running sample_ingest as end-to-end smoke test..."
+  databricks bundle run sample_ingest -t ci \
+    --var="catalog=${BUNDLE_CATALOG}" \
+    --var="schema=${BUNDLE_SCHEMA}" \
+    --var="warehouse_id=${WAREHOUSE_ID}"
+fi

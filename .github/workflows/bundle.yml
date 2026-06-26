@@ -79,7 +79,7 @@ jobs:
           bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
           echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
       - uses: databricks/setup-cli@main
-      - name: Deploy asset bundle
+      - name: Deploy asset bundle and run smoke test
         working-directory: bundle
         env:
           DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}

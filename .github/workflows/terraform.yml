@@ -308,7 +308,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - uses: databricks/setup-cli@main
-      - name: Deploy asset bundle
+      - name: Deploy asset bundle and run smoke test
         env:
           DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ needs.apply-platform.outputs.warehouse_id }}
@@ -360,7 +360,7 @@ jobs:
           bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
           echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
       - uses: databricks/setup-cli@main
-      - name: Deploy asset bundle
+      - name: Deploy asset bundle and run smoke test
         working-directory: bundle
         env:
           DATABRICKS_HOST: ${{ steps.ws.outputs.workspace_url }}
