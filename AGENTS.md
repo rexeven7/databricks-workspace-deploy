@@ -18,6 +18,10 @@ environment. The agent does not need cloud credentials.
 
 ## What the cloud agent should do
 
+0. **Client / greenfield intake** — For requests like a new client workspace, dev+prod,
+   medallion, SDP, metric views, dashboards, or Genie: follow
+   `.cursor/skills/databricks-client-intake/SKILL.md` — propose architecture and ask
+   clarifying questions **before** writing code. Do not skip to implementation.
 1. **Gather parameters in conversation** — region, deployment slug, catalog/schema
    names, feature requests. Do not ask the user to edit tfvars by hand unless they
    prefer it; prefer documenting runtime overrides (GitHub Environment vars or
