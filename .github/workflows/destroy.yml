@@ -154,7 +154,7 @@ jobs:
       - name: Sync force_destroy flags into state (demo teardown)
         run: |
           terraform apply -auto-approve -var-file=env/prod.tfvars -input=false \
-            -target=module.unity_catalog.databricks_external_location
+            -target=module.unity_catalog
       - name: Destroy (layer 20)
         run: terraform destroy -auto-approve -var-file=env/prod.tfvars -input=false
 

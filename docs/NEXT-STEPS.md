@@ -91,6 +91,56 @@ After green CI: user runs **deploy** workflow or merges to `main`.
 
 ---
 
+## Production use (future) — repo per client
+
+This template repo stays **neutral** for interviews and demos (slugs, GitHub
+Environment vars, architecture proposals — no client names on `main`). For real
+client engagements, prefer a **dedicated repo per client** forked from this template.
+
+### Why
+
+| Template repo (demo) | Client repo (production) |
+|---|---|
+| Agent must not commit `dbw-meridian-dev` to `main` | Client names belong in that repo |
+| Isolation via `deployment_slug` + env vars | Isolation via repo boundary + handoff |
+| One OIDC federated credential | One federated credential per repo (same Entra app is fine) |
+
+**Shared Terraform state storage is still OK** — use one storage account and
+container (`rg-tfstate` / `tfstate`), with **per-client state keys**, e.g.:
+
+```text
+databricks/meridian/10-infra.tfstate
+databricks/meridian/20-platform.tfstate
+```
+
+Extend `resolve-deployment.sh` (or committed backend config in the client repo) to
+use that key prefix; no need for a state account per client.
+
+### Agent workflow (sketch)
+
+1. `gh repo create <org>/meridian-databricks --template <this-repo> --private`
+2. Bootstrap that repo: `AZURE_*` secrets, `production` environment variables,
+   Entra federated credential with subject
+   `repo:<org>/meridian-databricks:environment:production` (and `pull_request` if
+   planning on PRs).
+3. Connect Cursor Cloud Agent to **the client repo** (not the template).
+4. Intake → `docs/architecture-proposals/meridian-….md` → implementation PRs in
+   that repo only.
+5. CI apply/destroy on that repo; template repo unchanged.
+
+### When to stay on the template repo
+
+- Interview demos, quick pilots → **deploy** workflow + slug (no new repo).
+- Public showcase of patterns → keep generic `main` here.
+
+### Not started yet
+
+- `docs/CLIENT-REPO-BOOTSTRAP.md` with copy-paste `gh` + `az` commands
+- Template flag on GitHub repo settings
+- Agent skill step for repo spawn + OIDC registration
+
+---
+
 ## Quick reference
 
 - **Demo checklist:** [DEMO-SETUP.md](DEMO-SETUP.md)
