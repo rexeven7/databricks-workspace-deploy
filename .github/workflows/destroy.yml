@@ -153,10 +153,10 @@ jobs:
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
       - name: Sync force_destroy flags into state (demo teardown)
         run: |
-          terraform apply -auto-approve -var-file=env/prod.tfvars -input=false \
+          bash ../../../.github/scripts/terraform-with-deployment-vars.sh apply -auto-approve -input=false \
             -target=module.unity_catalog
       - name: Destroy (layer 20)
-        run: terraform destroy -auto-approve -var-file=env/prod.tfvars -input=false
+        run: bash ../../../.github/scripts/terraform-with-deployment-vars.sh destroy -auto-approve -input=false
 
   destroy-infra:
     needs: destroy-platform
@@ -194,7 +194,7 @@ jobs:
       - name: Init backend (AAD)
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
       - name: Destroy (layer 10)
-        run: terraform destroy -auto-approve -var-file=env/prod.tfvars -input=false
+        run: bash ../../../.github/scripts/terraform-with-deployment-vars.sh destroy -auto-approve -input=false
 
   purge-state:
     needs: destroy-infra

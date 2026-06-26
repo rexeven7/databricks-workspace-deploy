@@ -19,7 +19,6 @@ bash "$SCRIPT_DIR/spawn-client-validate-env.sh"
 
 CLIENT_REPO_NAME="${CLIENT_REPO_NAME:-${CLIENT_SLUG}-databricks}"
 GH_REPO="${GH_ORG}/${CLIENT_REPO_NAME}"
-sa_suffix="$(echo "$CLIENT_SLUG" | cut -c1-18)"
 
 export GH_TOKEN
 log() { printf '%s\n' "$*"; }
@@ -42,13 +41,16 @@ create_repo_if_missing() {
 }
 
 bootstrap_client_repo() {
+  # shellcheck source=lib/deploy-names.sh
+  source "$SCRIPT_DIR/lib/deploy-names.sh"
   export GH_REPO
   export WORKSPACE_NAME="dbw-${CLIENT_SLUG}"
   export RESOURCE_GROUP_NAME="rg-dbx-${CLIENT_SLUG}"
-  export UC_STORAGE_ACCOUNT_NAME="stdbx${sa_suffix}"
+  export UC_STORAGE_ACCOUNT_NAME="$(resolve_uc_storage_account_name "$CLIENT_SLUG")"
   export CATALOG_NAME="${CLIENT_SLUG}"
   export WAREHOUSE_NAME="wh-${CLIENT_SLUG}"
 
+  log "UC storage account (layer 10): $UC_STORAGE_ACCOUNT_NAME"
   log "Bootstrapping GitHub + OIDC for $GH_REPO"
   bash "$SCRIPT_DIR/bootstrap-platform.sh"
 }

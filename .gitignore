@@ -4,6 +4,7 @@
 *.tfstate.*
 crash.log
 crash.*.log
+**/env/deployment.auto.tfvars
 *.tfvars.local
 override.tf
 override.tf.json
