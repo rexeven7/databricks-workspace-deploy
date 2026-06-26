@@ -104,7 +104,7 @@ jobs:
           BUNDLE_CATALOG: ${{ steps.platform.outputs.catalog_name }}
           BUNDLE_SCHEMA: ${{ steps.platform.outputs.schema_name }}
         run: bash ../.github/scripts/bundle-destroy-ci.sh
-      - name: Purge bundle-created tables from UC schema
+      - name: Purge bundle-created UC objects
         continue-on-error: true
         env:
           DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}
@@ -151,6 +151,10 @@ jobs:
         run: bash ../../../.github/scripts/load-deployment-env.sh
       - name: Init backend (AAD)
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+      - name: Sync force_destroy flags into state (demo teardown)
+        run: |
+          terraform apply -auto-approve -var-file=env/prod.tfvars -input=false \
+            -target=module.unity_catalog.databricks_external_location
       - name: Destroy (layer 20)
         run: terraform destroy -auto-approve -var-file=env/prod.tfvars -input=false
 

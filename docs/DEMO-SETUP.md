@@ -177,10 +177,10 @@ Use the **destroy** workflow (not the Azure portal alone — that leaves stale T
 2. `confirm`: type `production`.
 3. Approve the `production` environment if reviewers are configured.
 
-What it does: `bundle destroy` (best-effort) → **drop all tables/views** in the
-Terraform-managed schema (from state outputs; no hardcoded object names) → Terraform
-destroy layer 20 → layer 10 → optionally deletes state blobs in `rg-tfstate` (does
-**not** delete the state storage account).
+What it does: `bundle destroy` (best-effort) → **drop tables/views/volumes** in the
+Terraform-managed schema (catalog/schema from state; SQL API context, no hardcoded names)
+→ sync `force_destroy` on external location → Terraform destroy layer 20 → layer 10 →
+optionally deletes state blobs in `rg-tfstate` (does **not** delete the state storage account).
 
 What it does **not** do: remove `rg-tfstate`, Entra OIDC app, or GitHub secrets. UC catalog
 metadata in the account metastore may need manual cleanup in the account console after workspace

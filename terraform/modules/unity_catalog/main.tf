@@ -24,6 +24,7 @@ resource "databricks_external_location" "this" {
   url             = "${var.storage_location_url}/"
   credential_name = databricks_storage_credential.this.name
   comment         = "Managed by Terraform."
+  force_destroy   = true # demo teardown: drop even if managed storage has orphaned dependents
 }
 
 # A catalog is the top of the Unity Catalog three-level namespace
