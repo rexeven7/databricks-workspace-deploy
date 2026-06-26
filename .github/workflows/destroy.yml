@@ -1,0 +1,210 @@
+name: destroy
+
+# DEMO / SANDBOX TEARDOWN — reverse of deploy.yml (bundle → layer 20 → layer 10 → optional state purge).
+# workflow_dispatch only. Not intended for real client production cutovers.
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_slug:
+        description: >-
+          Sandbox slug to destroy (same value as deploy). Leave empty to tear down
+          the production demo footprint from GitHub Environment variables.
+        required: false
+        type: string
+      confirm:
+        description: >-
+          Type the normalized slug (letters/numbers only) or "production" if
+          deployment_slug is empty.
+        required: true
+        type: string
+      destroy_bundle:
+        description: Run databricks bundle destroy before Terraform (best-effort)
+        required: false
+        type: boolean
+        default: true
+      purge_state:
+        description: Delete Terraform state blobs after destroy (clean re-apply)
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      INPUT_CONFIRM: ${{ github.event.inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate destroy confirmation
+        run: bash .github/scripts/validate-destroy-confirm.sh
+
+  destroy-bundle:
+    needs: guard
+    if: inputs.destroy_bundle
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+      VAR_WORKSPACE_NAME: ${{ vars.WORKSPACE_NAME }}
+      VAR_UC_STORAGE_ACCOUNT_NAME: ${{ vars.UC_STORAGE_ACCOUNT_NAME }}
+      VAR_RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+      VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+      - name: Resolve deployment inputs
+        run: bash .github/scripts/load-deployment-env.sh
+      - name: Read platform outputs from state
+        id: platform
+        working-directory: terraform/live/20-platform
+        run: |
+          bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+          echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
+          echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+      - name: Read workspace URL from state
+        id: infra
+        working-directory: terraform/live/10-infra
+        run: |
+          bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
+          echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
+      - uses: databricks/setup-cli@main
+      - name: Destroy asset bundle (best-effort)
+        continue-on-error: true
+        working-directory: bundle
+        env:
+          DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}
+          WAREHOUSE_ID: ${{ steps.platform.outputs.warehouse_id }}
+          BUNDLE_CATALOG: ${{ steps.platform.outputs.catalog_name }}
+          BUNDLE_SCHEMA: sales
+        run: bash ../.github/scripts/bundle-destroy-ci.sh
+
+  destroy-platform:
+    needs: [guard, destroy-bundle]
+    if: |
+      always() && needs.guard.result == 'success' &&
+      (needs.destroy-bundle.result == 'success' || needs.destroy-bundle.result == 'skipped' || needs.destroy-bundle.result == 'failure')
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: terraform/live/20-platform
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      DATABRICKS_AUTH_TYPE: azure-cli
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+      VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+      - name: Resolve deployment inputs
+        run: bash ../../../.github/scripts/load-deployment-env.sh
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+      - name: Destroy (layer 20)
+        run: terraform destroy -auto-approve -var-file=env/prod.tfvars -input=false
+
+  destroy-infra:
+    needs: destroy-platform
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: terraform/live/10-infra
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      VAR_WORKSPACE_NAME: ${{ vars.WORKSPACE_NAME }}
+      VAR_UC_STORAGE_ACCOUNT_NAME: ${{ vars.UC_STORAGE_ACCOUNT_NAME }}
+      VAR_RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+      - name: Resolve deployment inputs
+        run: bash ../../../.github/scripts/load-deployment-env.sh
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
+      - name: Destroy (layer 10)
+        run: terraform destroy -auto-approve -var-file=env/prod.tfvars -input=false
+
+  purge-state:
+    needs: destroy-infra
+    if: inputs.purge_state && needs.destroy-infra.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_WORKSPACE_NAME: ${{ vars.WORKSPACE_NAME }}
+      VAR_UC_STORAGE_ACCOUNT_NAME: ${{ vars.UC_STORAGE_ACCOUNT_NAME }}
+      VAR_RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+      VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Resolve deployment inputs
+        run: bash .github/scripts/load-deployment-env.sh
+      - name: Purge Terraform state blobs
+        run: bash .github/scripts/purge-terraform-state.sh

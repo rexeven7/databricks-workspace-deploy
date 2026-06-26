@@ -33,6 +33,7 @@ Goal: PR → offline validate + **cloud plan** (OIDC). Merge or **deploy** workf
 | `.github/workflows/terraform.yml` | PR gate + plan; apply on `main` |
 | `.github/workflows/bundle.yml` | PR validate; prod deploy on `main` (OIDC) |
 | `.github/workflows/deploy.yml` | **Interview sandbox** — `workflow_dispatch` + slug |
+| `.github/workflows/destroy.yml` | **Demo teardown** — reverse deploy; optional state purge |
 | `.github/scripts/resolve-deployment.sh` | Runtime names/state keys (keeps `main` generic) |
 
 ### B1–B8 bootstrap
@@ -74,8 +75,11 @@ irm https://raw.githubusercontent.com/databricks-solutions/ai-dev-kit/main/insta
 **Greenfield client (full stack):**
 
 > New client Hike2 — dev and prod, full medallion with SDP, metric view, AI/BI
-> dashboard, and Genie. Propose architecture per best practices and ask what you
-> need before opening PRs.
+> dashboard, and Genie. Propose architecture per best practices, save to
+> `docs/architecture-proposals/`, ask what you need, then open a proposal-only PR
+> before any Terraform or bundle code.
+
+Architecture proposals: [docs/architecture-proposals/README.md](architecture-proposals/README.md)
 
 **Small change:**
 

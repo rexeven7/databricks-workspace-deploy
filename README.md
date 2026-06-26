@@ -63,8 +63,9 @@ bundle/
   databricks.yml         # variables + dev/prod targets
   resources/job.yml      # serverless job
   src/ingest_sample.py   # the notebook
-.github/workflows/       # terraform.yml, bundle.yml
+| `.github/workflows/`       # terraform.yml, bundle.yml, deploy.yml, destroy.yml |
 docs/INTERVIEW.md        # talking points mapped to sources  ← read this
+docs/architecture-proposals/  # client ADRs (Option C intake — agent writes before code)
 ```
 
 ## Prerequisites
@@ -118,9 +119,12 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 - **Merge to `main`** → `terraform apply` then **`bundle deploy` + `sample_ingest` smoke test** (host/warehouse from Terraform outputs).
 - **Bundle-only changes on `main`** → `bundle.yml` deploys from Terraform state.
 - **Manual `deploy` workflow** → ephemeral sandbox from a slug (interview demos; no commits).
+- **Manual `destroy` workflow** → demo/sandbox teardown (reverse deploy + optional state purge).
 - **Catch-up** → Actions → **terraform** → Run workflow → check **bundle_only** if platform already exists.
 
 **One-time platform setup** (Azure OIDC, GitHub secrets/variables, Cursor): [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md).
+
+**Greenfield client intake** (architecture proposals before implementation): [docs/architecture-proposals/README.md](docs/architecture-proposals/README.md).
 
 See [docs/INTERVIEW.md](docs/INTERVIEW.md) for every best practice, *why* it's
 there, and *where* it comes from.

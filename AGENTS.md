@@ -21,7 +21,10 @@ environment. The agent does not need cloud credentials.
 0. **Client / greenfield intake** — For requests like a new client workspace, dev+prod,
    medallion, SDP, metric views, dashboards, or Genie: follow
    `.cursor/skills/databricks-client-intake/SKILL.md` — propose architecture and ask
-   clarifying questions **before** writing code. Do not skip to implementation.
+   clarifying questions **before** writing code. **Write the proposal to**
+   `docs/architecture-proposals/<client-slug>-<scope>.md` (from `_TEMPLATE.md`); prefer
+   a proposal-only PR before implementation. See
+   [docs/architecture-proposals/README.md](docs/architecture-proposals/README.md).
 1. **Gather parameters in conversation** — region, deployment slug, catalog/schema
    names, feature requests. Do not ask the user to edit tfvars by hand unless they
    prefer it; prefer documenting runtime overrides (GitHub Environment vars or
@@ -37,6 +40,8 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 4. **Open a PR** with summary, test plan, and notes on what CI `terraform plan`
    will show (plan runs in GitHub Actions with OIDC — the agent does not run plan).
+   Link approved architecture proposals from `docs/architecture-proposals/` when
+   the change implements a client engagement.
 5. **Babysit the PR** — fix scoped CI failures, address review comments, re-push
    until validate/plan jobs are green. Summarize the plan from the Actions job
    summary for the user.
@@ -50,6 +55,8 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 - **Do not** run `terraform apply`, `terraform plan` (needs backend + Azure), or
   `databricks bundle deploy` unless the user explicitly overrides this policy for
   a local session with their own credentials.
+- **Do not** run the **destroy** workflow or `terraform destroy` — demo teardown is a
+  human action in GitHub Actions, not an agent default.
 - **Do not** commit client-specific globally-unique names (storage accounts,
   workspace names) to `main`. Use sandbox slugs or document GitHub Environment
   variables instead.

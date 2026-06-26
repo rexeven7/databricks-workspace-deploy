@@ -52,7 +52,7 @@ bash scripts/assign-ci-roles.sh
 | Entra tenant ID | Used as `AZURE_TENANT_ID`. |
 | UC metastore in region | Required for catalog creation. New Azure workspaces usually get one automatically. |
 | Remote state storage | Resource group `rg-tfstate`, storage account (globally unique name), container `tfstate`. Created once; all deployments share it with **different state keys** per slug/environment. |
-| Tear-down discipline | After demos, destroy sandboxes (`terraform destroy` per slug or delete the resource group). The template repo stays clean. |
+| Tear-down discipline | Use the **destroy** workflow (demo/sandbox only) or `terraform destroy` per slug. Never delete `rg-tfstate` unless re-bootstrapping. |
 
 ### GitHub repo
 
@@ -157,6 +157,35 @@ Set `STATE_STORAGE_ACCOUNT_NAME` on the `production` environment to `<STATE_SA>`
 | **bundle** | PR | `bundle validate` (optional; needs `DATABRICKS_HOST` env var) |
 | **bundle** | Push to `main` (`bundle/**`) | `bundle deploy -t ci` + `sample_ingest` smoke test |
 | **deploy** | Manual (`workflow_dispatch`) | **Interview path:** slug → isolated state + resources → Terraform → bundle + smoke test |
+| **destroy** | Manual (`workflow_dispatch`) | **Demo teardown:** reverse of deploy; optional state purge for clean re-apply |
+
+### Tear down a demo environment
+
+Use the **destroy** workflow (not the Azure portal alone — that leaves stale Terraform state).
+
+**Sandbox** (same slug as deploy):
+
+1. Actions → **destroy** → Run workflow.
+2. `deployment_slug`: e.g. `interviewjun25` (normalized to alphanumeric).
+3. `confirm`: type the normalized slug exactly (`interviewjun25`).
+4. Leave **purge_state** checked for a clean slate before the next deploy.
+
+**Production demo** (GitHub Environment vars footprint):
+
+1. Actions → **destroy** → leave `deployment_slug` empty.
+2. `confirm`: type `production`.
+3. Approve the `production` environment if reviewers are configured.
+
+What it does: `bundle destroy` (best-effort) → Terraform destroy layer 20 → layer 10 →
+optionally deletes state blobs in `rg-tfstate` (does **not** delete the state storage account).
+
+What it does **not** do: remove `rg-tfstate`, Entra OIDC app, or GitHub secrets. UC catalog
+metadata in the account metastore may need manual cleanup in the account console after workspace
+deletion.
+
+**Not for real client production** — use change-managed destroy outside this template.
+
+Legacy manual destroy (if needed): see interview sandbox section below.
 
 ### If Terraform ran but the bundle did not (catch-up)
 

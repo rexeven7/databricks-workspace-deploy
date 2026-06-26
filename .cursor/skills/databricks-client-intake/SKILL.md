@@ -111,12 +111,39 @@ Never one giant PR. Propose order:
 
 | PR | Contents | Risk |
 |----|----------|------|
-| 1 | Terraform: dual workspace/module params, env resolution for `hike2` | Medium — infra |
+| 0 | **Architecture proposal** → `docs/architecture-proposals/<slug>.md` (PR by itself) | None |
+| 1 | Terraform: dual workspace/module params, env resolution for client slug | Medium — infra |
 | 2 | SDP pipeline skeleton (bronze/silver/gold) + synthetic/demo source | Low — bundle only |
 | 3 | Gold table contract + metric view SQL job | Low |
 | 4 | Dashboard + Genie (direct engine if needed) | Low — needs warehouse_id vars |
 | 5 | CI: extend smoke test (`bundle run` pipeline or job chain) | Low |
 | 6 | Docs: client runbook (GitHub Environment vars, not committed secrets) | Low |
+
+### 1.6 Persist the proposal (required)
+
+After drafting the architecture in chat, **write it to the repo**:
+
+1. Copy [`docs/architecture-proposals/_TEMPLATE.md`](../../../docs/architecture-proposals/_TEMPLATE.md)
+   to `docs/architecture-proposals/<client-slug>-<short-scope>.md`.
+2. Fill all sections; set YAML `status: draft` or `questions-pending`.
+3. Set `created` to today's date (ISO `YYYY-MM-DD`).
+4. Prefer a **proposal-only PR** first (markdown only) so reviewers approve
+   architecture before code.
+5. See [`docs/architecture-proposals/README.md`](../../../docs/architecture-proposals/README.md).
+
+**Do not** put secrets or subscription IDs in the proposal file.
+
+When the user approves (or accepts demo defaults):
+
+- Set `status: approved`, `approved: YYYY-MM-DD`, fill **Decisions**, clear or
+  resolve **Open questions**, check **Approval** boxes.
+- Commit the update (same PR or follow-up) before opening implementation PR 1.
+
+Every implementation PR description must include:
+
+```markdown
+Architecture: docs/architecture-proposals/<client-slug>-<short-scope>.md (approved YYYY-MM-DD)
+```
 
 ## Phase 2 — Clarifying questions (required)
 
@@ -157,10 +184,11 @@ Use **AskQuestion** when available; otherwise numbered list. Group by theme.
 
 ## Phase 3 — After approval
 
-1. Summarize **decisions** in PR description (architecture appendix).
-2. Implement **one PR slice** at a time; run offline Terraform tests per `AGENTS.md`.
-3. Open PR with test plan referencing CI jobs (`terraform plan`, `bundle validate`).
-4. Babysit until green; tell user to merge or run `deploy` workflow with slug.
+1. Update the proposal file: `status: approved`, decisions filled, approval checklist checked.
+2. Summarize **decisions** in PR description; link the proposal path.
+3. Implement **one PR slice** at a time; run offline Terraform tests per `AGENTS.md`.
+4. Open PR with test plan referencing CI jobs (`terraform plan`, `bundle validate`).
+5. Babysit until green; tell user to merge or run `deploy` workflow with slug.
 
 ## Example opener (Hike2)
 
