@@ -113,10 +113,12 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 ## CI/CD
 
-- **PR** → `terraform fmt/validate/test` (mocked, no creds) + `bundle validate`.
-- **Merge to main** → `terraform apply` (layer 10 → 20) then `bundle deploy`,
-  gated by a protected GitHub *Environment* and authenticated with **Azure OIDC**
-  (federated — no long-lived secrets in the repo).
+- **PR** → `terraform fmt/validate/test` (mocked) + **`terraform plan`** (OIDC) +
+  `bundle validate` (needs a live workspace — see [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md)).
+- **Merge to `main`** → `terraform apply` then `bundle deploy` (production Environment vars).
+- **Manual `deploy` workflow** → ephemeral sandbox from a slug (interview demos; no commits).
+
+**One-time platform setup** (Azure OIDC, GitHub secrets/variables, Cursor): [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md).
 
 See [docs/INTERVIEW.md](docs/INTERVIEW.md) for every best practice, *why* it's
 there, and *where* it comes from.

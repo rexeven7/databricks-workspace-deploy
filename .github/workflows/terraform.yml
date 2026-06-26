@@ -1,28 +1,30 @@
 name: terraform
 
-# WHY this shape: validate + test on every PR (fast, no cloud creds), then
-# plan/apply only after merge to main, gated by a protected GitHub Environment.
-# This is the "review gate before mutating infra" practice.
+# PR: offline validate + cloud plan (OIDC). Main: apply production. Dispatch: see deploy.yml.
 on:
   pull_request:
-    paths: ["terraform/**", ".github/workflows/terraform.yml"]
+    paths: ["terraform/**", ".github/workflows/terraform.yml", ".github/scripts/**"]
   push:
     branches: [main]
     paths: ["terraform/**"]
   workflow_dispatch:
+    inputs:
+      deployment_slug:
+        description: >-
+          Ephemeral sandbox slug (e.g. interview-jun25). Leave empty to apply
+          production values from the GitHub Environment. Prefer the "deploy"
+          workflow for a full stack (Terraform + bundle).
+        required: false
+        type: string
 
 permissions:
   contents: read
-  id-token: write # required for Azure OIDC (federated, no long-lived secrets)
+  id-token: write
 
 env:
   TF_IN_AUTOMATION: "true"
 
 jobs:
-  # ----------------------------------------------------------------------------
-  # PR gate: fmt + validate + native tests. Runs with NO Azure credentials
-  # because tests mock the providers (see *.tftest.hcl).
-  # ----------------------------------------------------------------------------
   validate:
     runs-on: ubuntu-latest
     strategy:
@@ -40,7 +42,7 @@ jobs:
       - name: Format check
         run: terraform fmt -check -recursive ../../..
 
-      - name: Init (no backend - validation only)
+      - name: Init (no backend)
         run: terraform init -backend=false
 
       - name: Validate
@@ -49,12 +51,9 @@ jobs:
       - name: Test (mocked providers, offline)
         run: terraform test
 
-  # ----------------------------------------------------------------------------
-  # Apply layer 10 (infra) on merge to main. Gated by the "production" env.
-  # ----------------------------------------------------------------------------
-  apply-infra:
-    if: github.ref == 'refs/heads/main'
-    needs: validate
+  plan-infra:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [validate]
     runs-on: ubuntu-latest
     environment: production
     defaults:
@@ -65,20 +64,42 @@ jobs:
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ""
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_WORKSPACE_NAME: ${{ vars.WORKSPACE_NAME }}
+      VAR_UC_STORAGE_ACCOUNT_NAME: ${{ vars.UC_STORAGE_ACCOUNT_NAME }}
+      VAR_RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
-      - run: terraform init -backend-config=env/prod.backend.hcl
-      - run: terraform apply -auto-approve -var-file=env/prod.tfvars
 
-  # ----------------------------------------------------------------------------
-  # Apply layer 20 (platform) after infra. Same OIDC auth; depends on infra.
-  # ----------------------------------------------------------------------------
-  apply-platform:
-    if: github.ref == 'refs/heads/main'
-    needs: apply-infra
+      - name: Resolve production deployment inputs
+        run: |
+          while IFS= read -r line; do
+            echo "$line" >> "$GITHUB_ENV"
+          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
+
+      - name: Plan (layer 10)
+        run: terraform plan -var-file=env/prod.tfvars -no-color -input=false 2>&1 | tee "${{ runner.temp }}/plan-10.txt"
+
+      - name: Plan summary
+        run: |
+          {
+            echo "## Terraform plan — 10-infra"
+            echo '```terraform'
+            tail -c 55000 "${{ runner.temp }}/plan-10.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  plan-platform:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [validate, plan-infra]
     runs-on: ubuntu-latest
     environment: production
     defaults:
@@ -89,10 +110,113 @@ jobs:
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ""
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
-      - run: terraform init -backend-config=env/prod.backend.hcl
-      - run: terraform apply -auto-approve -var-file=env/prod.tfvars
+
+      - name: Resolve production deployment inputs
+        run: |
+          while IFS= read -r line; do
+            echo "$line" >> "$GITHUB_ENV"
+          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+
+      - name: Plan (layer 20)
+        run: terraform plan -var-file=env/prod.tfvars -no-color -input=false 2>&1 | tee "${{ runner.temp }}/plan-20.txt"
+
+      - name: Plan summary
+        run: |
+          {
+            echo "## Terraform plan — 20-platform"
+            echo '```terraform'
+            tail -c 55000 "${{ runner.temp }}/plan-20.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply-infra:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [validate]
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: terraform/live/10-infra
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      VAR_WORKSPACE_NAME: ${{ vars.WORKSPACE_NAME }}
+      VAR_UC_STORAGE_ACCOUNT_NAME: ${{ vars.UC_STORAGE_ACCOUNT_NAME }}
+      VAR_RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Resolve deployment inputs
+        run: |
+          while IFS= read -r line; do
+            echo "$line" >> "$GITHUB_ENV"
+          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+          echo "Deploying in **$DEPLOYMENT_MODE** mode" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
+
+      - name: Apply (layer 10)
+        run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
+
+  apply-platform:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [apply-infra]
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: terraform/live/20-platform
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Resolve deployment inputs
+        run: |
+          while IFS= read -r line; do
+            echo "$line" >> "$GITHUB_ENV"
+          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+
+      - name: Apply (layer 20)
+        run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false

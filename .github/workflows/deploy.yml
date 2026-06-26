@@ -1,0 +1,168 @@
+name: deploy
+
+# One-click interview / sandbox deploy: Terraform (10 → 20) then bundle, all via OIDC.
+# Does not mutate committed tfvars — inputs are resolved at runtime.
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_slug:
+        description: >-
+          Unique slug for this deploy (e.g. interview-jun25). Drives resource
+          names and a dedicated state prefix under databricks/<slug>/.
+        required: true
+        type: string
+      run_bundle_job:
+        description: Run sample_ingest after bundle deploy
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  apply-infra:
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      workspace_url: ${{ steps.out.outputs.workspace_url }}
+    defaults:
+      run:
+        working-directory: terraform/live/10-infra
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Resolve sandbox deployment inputs
+        run: |
+          while IFS= read -r line; do
+            echo "$line" >> "$GITHUB_ENV"
+          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+          echo "## Deploy **$DEPLOYMENT_MODE** — \`$TF_VAR_workspace_name\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
+
+      - name: Apply (layer 10)
+        run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
+
+      - name: Capture workspace URL
+        id: out
+        run: echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
+
+  apply-platform:
+    needs: apply-infra
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      warehouse_id: ${{ steps.out.outputs.warehouse_id }}
+    defaults:
+      run:
+        working-directory: terraform/live/20-platform
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Resolve sandbox deployment inputs
+        run: |
+          while IFS= read -r line; do
+            echo "$line" >> "$GITHUB_ENV"
+          done < <(bash ../../../.github/scripts/resolve-deployment.sh)
+
+      - name: Init backend (AAD)
+        run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+
+      - name: Apply (layer 20)
+        run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
+
+      - name: Capture warehouse id
+        id: out
+        run: echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
+
+  bundle:
+    needs: [apply-infra, apply-platform]
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: bundle
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve sandbox deployment inputs
+        run: |
+          while IFS= read -r line; do
+            echo "$line" >> "$GITHUB_ENV"
+          done < <(bash ../.github/scripts/resolve-deployment.sh)
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure Databricks CLI (Azure CLI token exchange)
+        run: |
+          echo "DATABRICKS_HOST=https://${{ needs.apply-infra.outputs.workspace_url }}" >> "$GITHUB_ENV"
+          echo "DATABRICKS_AUTH_TYPE=azure-cli" >> "$GITHUB_ENV"
+
+      - uses: databricks/setup-cli@main
+
+      - name: Validate bundle (ci target)
+        run: |
+          databricks bundle validate -t ci \
+            --var="catalog=${BUNDLE_CATALOG}" \
+            --var="schema=${BUNDLE_SCHEMA}" \
+            --var="warehouse_id=${{ needs.apply-platform.outputs.warehouse_id }}"
+
+      - name: Deploy bundle (ci target)
+        run: |
+          databricks bundle deploy -t ci \
+            --var="catalog=${BUNDLE_CATALOG}" \
+            --var="schema=${BUNDLE_SCHEMA}" \
+            --var="warehouse_id=${{ needs.apply-platform.outputs.warehouse_id }}"
+
+      - name: Run sample ingest (optional)
+        if: inputs.run_bundle_job
+        run: |
+          databricks bundle run sample_ingest -t ci \
+            --var="catalog=${BUNDLE_CATALOG}" \
+            --var="schema=${BUNDLE_SCHEMA}" \
+            --var="warehouse_id=${{ needs.apply-platform.outputs.warehouse_id }}"

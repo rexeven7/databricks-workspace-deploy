@@ -4,7 +4,9 @@ resource_group_name = "rg-databricks-prod"
 workspace_name      = "dbw-demo-prod"
 sku                 = "premium"
 
-# ADLS Gen2 account for the UC catalog managed location (globally unique - change me).
+# Example values — production deploys override via GitHub Environment variables
+# (WORKSPACE_NAME, UC_STORAGE_ACCOUNT_NAME, …) or workflow_dispatch slug inputs.
+# See docs/DEMO-SETUP.md.
 uc_storage_account_name = "stdbxucprod0001"
 
 tags = {

@@ -1,8 +1,7 @@
 name: bundle
 
-# Asset Bundle CI: validate on PR, deploy on merge. Auth uses a Databricks
-# service principal (OAuth M2M) - host + client id/secret stored as GitHub
-# secrets, no personal access tokens.
+# PR: validate (needs a live workspace — see docs/DEMO-SETUP.md).
+# Main: deploy prod target. Sandbox / interview: use the "deploy" workflow instead.
 on:
   pull_request:
     paths: ["bundle/**", ".github/workflows/bundle.yml"]
@@ -10,26 +9,38 @@ on:
     branches: [main]
     paths: ["bundle/**"]
   workflow_dispatch:
+    inputs:
+      target:
+        description: Bundle target
+        required: true
+        default: prod
+        type: choice
+        options: [ci, prod, dev]
 
-env:
-  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   validate:
+    if: ${{ vars.DATABRICKS_HOST != '' }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: bundle
+    # validate requires DATABRICKS_HOST — set on the production environment (see DEMO-SETUP).
     steps:
       - uses: actions/checkout@v4
       - uses: databricks/setup-cli@main
       - name: Validate (dev target)
+        env:
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle validate -t dev
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DATABRICKS_HOST != ''
     needs: validate
     runs-on: ubuntu-latest
     environment: production
@@ -38,6 +49,52 @@ jobs:
         working-directory: bundle
     steps:
       - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Configure Databricks CLI (Azure CLI token exchange)
+        env:
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+        run: |
+          if [ -z "$DATABRICKS_HOST" ]; then
+            echo "Set vars.DATABRICKS_HOST on the production environment (see docs/DEMO-SETUP.md)" >&2
+            exit 1
+          fi
+          echo "DATABRICKS_AUTH_TYPE=azure-cli" >> "$GITHUB_ENV"
       - uses: databricks/setup-cli@main
       - name: Deploy (prod target)
-        run: databricks bundle deploy -t prod
+        env:
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+          WAREHOUSE_ID: ${{ vars.WAREHOUSE_ID }}
+        run: |
+          databricks bundle deploy -t prod \
+            --var="warehouse_id=${WAREHOUSE_ID}"
+
+  deploy-dispatch:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: bundle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Configure Databricks CLI
+        env:
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+        run: echo "DATABRICKS_AUTH_TYPE=azure-cli" >> "$GITHUB_ENV"
+      - uses: databricks/setup-cli@main
+      - name: Deploy (selected target)
+        env:
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+          WAREHOUSE_ID: ${{ vars.WAREHOUSE_ID }}
+        run: |
+          databricks bundle deploy -t "${{ inputs.target }}" \
+            --var="warehouse_id=${WAREHOUSE_ID}"
