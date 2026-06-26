@@ -79,6 +79,7 @@ These override committed `prod.tfvars` at runtime (`TF_VAR_*`). Names are not se
 | `UC_STORAGE_ACCOUNT_NAME` | `stdbxucprod0001` | UC ADLS account (globally unique) |
 | `RESOURCE_GROUP_NAME` | `rg-databricks-prod` | Production RG |
 | `CATALOG_NAME` | `prod` | UC catalog |
+| `SCHEMA_NAME` | `sales` | Domain schema within the catalog (bundle + UC purge) |
 | `WAREHOUSE_NAME` | `wh-demo-prod` | SQL warehouse |
 | `ADMIN_GROUP` | `account users` | UC catalog admin principal |
 | `DATA_ENGINEER_GROUP` | `account users` | UC engineer grants |
@@ -176,9 +177,10 @@ Use the **destroy** workflow (not the Azure portal alone — that leaves stale T
 2. `confirm`: type `production`.
 3. Approve the `production` environment if reviewers are configured.
 
-What it does: `bundle destroy` (best-effort) → **drop bundle-created UC tables**
-(e.g. `trips_curated` from the smoke test) → Terraform destroy layer 20 → layer 10 →
-optionally deletes state blobs in `rg-tfstate` (does **not** delete the state storage account).
+What it does: `bundle destroy` (best-effort) → **drop all tables/views** in the
+Terraform-managed schema (from state outputs; no hardcoded object names) → Terraform
+destroy layer 20 → layer 10 → optionally deletes state blobs in `rg-tfstate` (does
+**not** delete the state storage account).
 
 What it does **not** do: remove `rg-tfstate`, Entra OIDC app, or GitHub secrets. UC catalog
 metadata in the account metastore may need manual cleanup in the account console after workspace

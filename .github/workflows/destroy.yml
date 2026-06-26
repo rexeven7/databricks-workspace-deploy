@@ -65,6 +65,7 @@ jobs:
       VAR_UC_STORAGE_ACCOUNT_NAME: ${{ vars.UC_STORAGE_ACCOUNT_NAME }}
       VAR_RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
       VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_SCHEMA_NAME: ${{ vars.SCHEMA_NAME }}
       VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
     steps:
       - uses: actions/checkout@v5
@@ -85,6 +86,7 @@ jobs:
           bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
           echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
           echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+          echo "schema_name=$(terraform output -raw schema_name)" >> "$GITHUB_OUTPUT"
       - name: Read workspace URL from state
         id: infra
         working-directory: terraform/live/10-infra
@@ -100,7 +102,7 @@ jobs:
           DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ steps.platform.outputs.warehouse_id }}
           BUNDLE_CATALOG: ${{ steps.platform.outputs.catalog_name }}
-          BUNDLE_SCHEMA: sales
+          BUNDLE_SCHEMA: ${{ steps.platform.outputs.schema_name }}
         run: bash ../.github/scripts/bundle-destroy-ci.sh
       - name: Purge bundle-created tables from UC schema
         continue-on-error: true
@@ -108,8 +110,8 @@ jobs:
           DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ steps.platform.outputs.warehouse_id }}
           UC_CATALOG: ${{ steps.platform.outputs.catalog_name }}
-          UC_SCHEMA: sales
-        run: bash .github/scripts/uc-purge-schema-tables.sh
+          UC_SCHEMA: ${{ steps.platform.outputs.schema_name }}
+        run: bash .github/scripts/uc-purge-schema-objects.sh
 
   destroy-platform:
     needs: [guard, teardown-app]
@@ -133,6 +135,7 @@ jobs:
       VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
       VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
       VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_SCHEMA_NAME: ${{ vars.SCHEMA_NAME }}
       VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
     steps:
       - uses: actions/checkout@v5
@@ -202,6 +205,7 @@ jobs:
       VAR_UC_STORAGE_ACCOUNT_NAME: ${{ vars.UC_STORAGE_ACCOUNT_NAME }}
       VAR_RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
       VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_SCHEMA_NAME: ${{ vars.SCHEMA_NAME }}
       VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
       VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
       VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}

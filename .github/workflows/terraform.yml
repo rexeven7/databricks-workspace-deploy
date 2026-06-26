@@ -155,6 +155,7 @@ jobs:
       VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
       VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
       VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_SCHEMA_NAME: ${{ vars.SCHEMA_NAME }}
       VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
     steps:
       - uses: actions/checkout@v5
@@ -250,6 +251,7 @@ jobs:
     outputs:
       warehouse_id: ${{ steps.out.outputs.warehouse_id }}
       catalog_name: ${{ steps.out.outputs.catalog_name }}
+      schema_name: ${{ steps.out.outputs.schema_name }}
     defaults:
       run:
         working-directory: terraform/live/20-platform
@@ -263,6 +265,7 @@ jobs:
       VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
       VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
       VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_SCHEMA_NAME: ${{ vars.SCHEMA_NAME }}
       VAR_WAREHOUSE_NAME: ${{ vars.WAREHOUSE_NAME }}
       VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
       VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
@@ -291,6 +294,7 @@ jobs:
         run: |
           echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
           echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+          echo "schema_name=$(terraform output -raw schema_name)" >> "$GITHUB_OUTPUT"
 
   bundle-deploy:
     needs: [apply-infra, apply-platform]
@@ -313,7 +317,7 @@ jobs:
           DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ needs.apply-platform.outputs.warehouse_id }}
           BUNDLE_CATALOG: ${{ needs.apply-platform.outputs.catalog_name }}
-          BUNDLE_SCHEMA: sales
+          BUNDLE_SCHEMA: ${{ needs.apply-platform.outputs.schema_name }}
         run: bash ../.github/scripts/bundle-deploy-ci.sh
 
   bundle-only:
@@ -330,6 +334,7 @@ jobs:
       VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
       VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
       VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_SCHEMA_NAME: ${{ vars.SCHEMA_NAME }}
       VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
       VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
     defaults:
@@ -353,6 +358,7 @@ jobs:
           bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
           echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
           echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+          echo "schema_name=$(terraform output -raw schema_name)" >> "$GITHUB_OUTPUT"
       - name: Read workspace URL from state
         id: ws
         working-directory: terraform/live/10-infra
@@ -366,5 +372,5 @@ jobs:
           DATABRICKS_HOST: ${{ steps.ws.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ steps.tf.outputs.warehouse_id }}
           BUNDLE_CATALOG: ${{ steps.tf.outputs.catalog_name }}
-          BUNDLE_SCHEMA: sales
+          BUNDLE_SCHEMA: ${{ steps.tf.outputs.schema_name }}
         run: bash ../.github/scripts/bundle-deploy-ci.sh

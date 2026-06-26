@@ -62,6 +62,8 @@ jobs:
         env:
           VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
           VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+          VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+          VAR_SCHEMA_NAME: ${{ vars.SCHEMA_NAME }}
           VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
           VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
         run: bash .github/scripts/load-deployment-env.sh
@@ -72,6 +74,7 @@ jobs:
           bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
           echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
           echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+          echo "schema_name=$(terraform output -raw schema_name)" >> "$GITHUB_OUTPUT"
       - name: Read workspace URL from state
         id: infra
         working-directory: terraform/live/10-infra
@@ -85,5 +88,5 @@ jobs:
           DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ steps.platform.outputs.warehouse_id }}
           BUNDLE_CATALOG: ${{ steps.platform.outputs.catalog_name }}
-          BUNDLE_SCHEMA: sales
+          BUNDLE_SCHEMA: ${{ steps.platform.outputs.schema_name }}
         run: bash ../.github/scripts/bundle-deploy-ci.sh

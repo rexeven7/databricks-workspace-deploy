@@ -77,6 +77,7 @@ jobs:
     outputs:
       warehouse_id: ${{ steps.out.outputs.warehouse_id }}
       catalog_name: ${{ steps.out.outputs.catalog_name }}
+      schema_name: ${{ steps.out.outputs.schema_name }}
     defaults:
       run:
         working-directory: terraform/live/20-platform
@@ -116,6 +117,7 @@ jobs:
         run: |
           echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
           echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+          echo "schema_name=$(terraform output -raw schema_name)" >> "$GITHUB_OUTPUT"
 
   bundle:
     needs: [apply-infra, apply-platform]
@@ -145,6 +147,6 @@ jobs:
           DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
           WAREHOUSE_ID: ${{ needs.apply-platform.outputs.warehouse_id }}
           BUNDLE_CATALOG: ${{ needs.apply-platform.outputs.catalog_name }}
-          BUNDLE_SCHEMA: sales
+          BUNDLE_SCHEMA: ${{ needs.apply-platform.outputs.schema_name }}
           BUNDLE_RUN_SAMPLE_INGEST: ${{ inputs.run_bundle_job }}
         run: bash ../.github/scripts/bundle-deploy-ci.sh

@@ -25,6 +25,7 @@ fi
 state_rg="${VAR_STATE_RESOURCE_GROUP_NAME:-rg-tfstate}"
 state_sa="${VAR_STATE_STORAGE_ACCOUNT_NAME:-sttfstatedbxdemo}"
 location="${VAR_AZURE_LOCATION:-eastus2}"
+schema_name="${VAR_SCHEMA_NAME:-sales}"
 
 emit() { printf '%s\n' "$1"; }
 
@@ -38,7 +39,7 @@ if [ "$mode" = "sandbox" ]; then
   emit "TF_VAR_workspace_name=dbw-${slug}"
   emit "TF_VAR_uc_storage_account_name=stdbx${sa_suffix}"
   emit "TF_VAR_catalog_name=$slug"
-  emit "TF_VAR_schema_name=sales"
+  emit "TF_VAR_schema_name=$schema_name"
   emit "TF_VAR_warehouse_name=wh-${slug}"
   emit "TF_VAR_admin_group=${VAR_ADMIN_GROUP:-account users}"
   emit "TF_VAR_data_engineer_group=${VAR_DATA_ENGINEER_GROUP:-account users}"
@@ -49,13 +50,14 @@ if [ "$mode" = "sandbox" ]; then
   emit "BACKEND_KEY_INFRA=databricks/${slug}/10-infra.tfstate"
   emit "BACKEND_KEY_PLATFORM=databricks/${slug}/20-platform.tfstate"
   emit "BUNDLE_CATALOG=$slug"
-  emit "BUNDLE_SCHEMA=sales"
+  emit "BUNDLE_SCHEMA=$schema_name"
 else
   # Production: optional GitHub Environment vars override committed tfvars (TF_VAR wins).
   [ -n "${VAR_WORKSPACE_NAME:-}" ] && emit "TF_VAR_workspace_name=${VAR_WORKSPACE_NAME}"
   [ -n "${VAR_UC_STORAGE_ACCOUNT_NAME:-}" ] && emit "TF_VAR_uc_storage_account_name=${VAR_UC_STORAGE_ACCOUNT_NAME}"
   [ -n "${VAR_RESOURCE_GROUP_NAME:-}" ] && emit "TF_VAR_resource_group_name=${VAR_RESOURCE_GROUP_NAME}"
   [ -n "${VAR_CATALOG_NAME:-}" ] && emit "TF_VAR_catalog_name=${VAR_CATALOG_NAME}"
+  [ -n "${VAR_SCHEMA_NAME:-}" ] && emit "TF_VAR_schema_name=${VAR_SCHEMA_NAME}"
   [ -n "${VAR_WAREHOUSE_NAME:-}" ] && emit "TF_VAR_warehouse_name=${VAR_WAREHOUSE_NAME}"
   [ -n "${VAR_ADMIN_GROUP:-}" ] && emit "TF_VAR_admin_group=${VAR_ADMIN_GROUP}"
   [ -n "${VAR_DATA_ENGINEER_GROUP:-}" ] && emit "TF_VAR_data_engineer_group=${VAR_DATA_ENGINEER_GROUP}"
@@ -66,7 +68,7 @@ else
   emit "BACKEND_KEY_INFRA=databricks/prod/10-infra.tfstate"
   emit "BACKEND_KEY_PLATFORM=databricks/prod/20-platform.tfstate"
   emit "BUNDLE_CATALOG=${VAR_CATALOG_NAME:-prod}"
-  emit "BUNDLE_SCHEMA=sales"
+  emit "BUNDLE_SCHEMA=$schema_name"
 fi
 
 emit "BACKEND_RESOURCE_GROUP=$state_rg"

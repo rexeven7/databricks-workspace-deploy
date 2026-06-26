@@ -3,6 +3,11 @@ output "catalog_name" {
   value       = module.unity_catalog.catalog_name
 }
 
+output "schema_name" {
+  description = "Domain schema within the catalog (feed to the bundle and UC purge)."
+  value       = module.unity_catalog.schema_name
+}
+
 output "schema_full_name" {
   description = "Fully-qualified catalog.schema (feed to the bundle)."
   value       = module.unity_catalog.schema_full_name
