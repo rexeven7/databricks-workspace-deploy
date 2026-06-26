@@ -46,7 +46,7 @@ jobs:
       VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
     steps:
       - uses: actions/checkout@v5
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -92,7 +92,7 @@ jobs:
       VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
     steps:
       - uses: actions/checkout@v5
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -135,7 +135,7 @@ jobs:
       - name: Resolve sandbox deployment inputs
         run: bash ../.github/scripts/load-deployment-env.sh
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
