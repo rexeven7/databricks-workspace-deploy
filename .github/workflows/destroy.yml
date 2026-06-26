@@ -47,9 +47,8 @@ jobs:
       - name: Validate destroy confirmation
         run: bash .github/scripts/validate-destroy-confirm.sh
 
-  destroy-bundle:
+  teardown-app:
     needs: guard
-    if: inputs.destroy_bundle
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -94,6 +93,7 @@ jobs:
           echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
       - uses: databricks/setup-cli@main
       - name: Destroy asset bundle (best-effort)
+        if: inputs.destroy_bundle
         continue-on-error: true
         working-directory: bundle
         env:
@@ -102,12 +102,20 @@ jobs:
           BUNDLE_CATALOG: ${{ steps.platform.outputs.catalog_name }}
           BUNDLE_SCHEMA: sales
         run: bash ../.github/scripts/bundle-destroy-ci.sh
+      - name: Purge bundle-created tables from UC schema
+        continue-on-error: true
+        env:
+          DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}
+          WAREHOUSE_ID: ${{ steps.platform.outputs.warehouse_id }}
+          UC_CATALOG: ${{ steps.platform.outputs.catalog_name }}
+          UC_SCHEMA: sales
+        run: bash .github/scripts/uc-purge-schema-tables.sh
 
   destroy-platform:
-    needs: [guard, destroy-bundle]
+    needs: [guard, teardown-app]
     if: |
       always() && needs.guard.result == 'success' &&
-      (needs.destroy-bundle.result == 'success' || needs.destroy-bundle.result == 'skipped' || needs.destroy-bundle.result == 'failure')
+      (needs.teardown-app.result == 'success' || needs.teardown-app.result == 'failure')
     runs-on: ubuntu-latest
     environment: production
     defaults:

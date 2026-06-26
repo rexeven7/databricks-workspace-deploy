@@ -34,6 +34,7 @@ resource "databricks_catalog" "this" {
   name           = var.catalog_name
   comment        = var.catalog_comment
   isolation_mode = "ISOLATED" # bound only to workspaces you explicitly grant, not every workspace on the metastore
+  force_destroy  = true       # demo teardown: allow destroy when bundle-created tables existed
 
   # Explicit managed location (required on UC Default Storage accounts). Lives as
   # a subpath of the external location registered above.
@@ -47,9 +48,10 @@ resource "databricks_catalog" "this" {
 }
 
 resource "databricks_schema" "this" {
-  catalog_name = databricks_catalog.this.name
-  name         = var.schema_name
-  comment      = "Domain schema for the ${var.environment} environment. Managed by Terraform."
+  catalog_name  = databricks_catalog.this.name
+  name          = var.schema_name
+  comment       = "Domain schema for the ${var.environment} environment. Managed by Terraform."
+  force_destroy = true # demo teardown; destroy workflow also drops bundle-created tables first
 }
 
 # MANAGED volume for raw/unstructured files that land before being read into

@@ -176,7 +176,8 @@ Use the **destroy** workflow (not the Azure portal alone — that leaves stale T
 2. `confirm`: type `production`.
 3. Approve the `production` environment if reviewers are configured.
 
-What it does: `bundle destroy` (best-effort) → Terraform destroy layer 20 → layer 10 →
+What it does: `bundle destroy` (best-effort) → **drop bundle-created UC tables**
+(e.g. `trips_curated` from the smoke test) → Terraform destroy layer 20 → layer 10 →
 optionally deletes state blobs in `rg-tfstate` (does **not** delete the state storage account).
 
 What it does **not** do: remove `rg-tfstate`, Entra OIDC app, or GitHub secrets. UC catalog
