@@ -30,7 +30,7 @@ jobs:
         working-directory: bundle
     # validate requires DATABRICKS_HOST — set on the production environment (see DEMO-SETUP).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: databricks/setup-cli@main
       - name: Validate (dev target)
         env:
@@ -48,7 +48,7 @@ jobs:
       run:
         working-directory: bundle
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -80,7 +80,7 @@ jobs:
       run:
         working-directory: bundle
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
