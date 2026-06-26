@@ -1,31 +1,30 @@
 # Architecture proposals
 
 Git-tracked **architecture decision records** for greenfield client engagements.
-The Cursor cloud agent writes these **before** implementation PRs (Option C intake).
+On the **template** repo, proposals stay in the agent working tree until **GO**;
+`spawn-client-repo.sh` copies them into the **new client repo**.
 
 ## Why this exists
 
 - **Audit trail** — what was agreed, when, and why (reviews, client handoffs).
-- **Separation** — proposal PR can land before Terraform/bundle code PRs.
-- **Reusable template** — same structure for every client; `main` stays generic.
+- **Separation** — proposal reviewed in chat; platform ships via spawn + deploy, not a template PR.
+- **Reusable template** — `main` here stays generic; client names live in client repos.
 
 ## Lifecycle
 
 | Status | Meaning |
 |--------|---------|
 | `draft` | Initial proposal from agent; questions may be open |
-| `questions-pending` | Written to disk; waiting on user answers |
-| `approved` | User confirmed decisions; agent may open implementation PRs |
+| `questions-pending` | Written locally; waiting on user answers |
+| `approved` | User said GO; agent runs `spawn-client-repo.sh` |
 | `superseded` | Replaced by a newer file (link in frontmatter) |
 
 ```mermaid
 stateDiagram-v2
-  [*] --> draft: Agent writes proposal
-  draft --> questions_pending: Save to docs/architecture-proposals/
-  questions_pending --> approved: User approves / defaults
-  approved --> [*]: Implementation PRs reference proposal
-  approved --> superseded: Architecture changes
-  superseded --> [*]
+  [*] --> draft: Agent writes proposal in chat / local file
+  draft --> questions_pending: Clarifying questions
+  questions_pending --> approved: User says GO
+  approved --> [*]: spawn-client-repo.sh → client repo + deploy
 ```
 
 ## File naming
@@ -36,21 +35,17 @@ docs/architecture-proposals/<client-slug>-<short-scope>.md
 
 Examples:
 
-- `hike2-medallion-full-stack.md`
+- `hike2-medallion-full-stack.md` (see `examples/` only)
 - `acme-analytics-pilot.md`
 
-Use lowercase slugs (alphanumeric + hyphens). Copy from [`_TEMPLATE.md`](_TEMPLATE.md).
+Use lowercase slugs. Copy from [`_TEMPLATE.md`](_TEMPLATE.md).
 
-## Agent workflow
+## Agent workflow (template repo)
 
-1. **Intake** — follow [`.cursor/skills/databricks-client-intake/SKILL.md`](../.cursor/skills/databricks-client-intake/SKILL.md).
-2. **Write proposal** — fill template; set `status: draft` or `questions-pending`.
-3. **Open PR** (optional but recommended) — *"Add architecture proposal for &lt;client&gt;"* only;
-   no Terraform/bundle changes yet.
-4. **Update** — after user answers, set `status: approved`, fill **Decisions** and
-   **Open questions** (resolved).
-5. **Implement** — each implementation PR links to the approved proposal path in
-   its description.
+1. **Intake** — [`.cursor/skills/databricks-client-intake/SKILL.md`](../.cursor/skills/databricks-client-intake/SKILL.md).
+2. **Write proposal** — local file; `status: draft`. **Do not PR to template `main`.**
+3. **GO** — [`.cursor/skills/client-repo-go/SKILL.md`](../.cursor/skills/client-repo-go/SKILL.md) → new repo + deploy.
+4. **Implement** — PRs on the **client repo** only; link the proposal in each PR.
 
 ## What not to put here
 

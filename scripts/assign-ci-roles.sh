@@ -10,29 +10,31 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/az-cli.sh
+source "$SCRIPT_DIR/lib/az-cli.sh"
+
 : "${APP_ID:?APP_ID is required (CI service principal application id)}"
 : "${SUB_ID:?SUB_ID is required (Azure subscription id)}"
 : "${STATE_SA:?STATE_SA is required (state storage account name)}"
 : "${STATE_RG:=rg-tfstate}"
 
-SP_OID="$(az ad sp show --id "$APP_ID" --query id -o tsv)"
-STATE_SA_ID="$(az storage account show -n "$STATE_SA" -g "$STATE_RG" --query id -o tsv)"
+APP_ID="$(echo "$APP_ID" | trim_tsv)"
+SUB_ID="$(echo "$SUB_ID" | trim_tsv)"
+STATE_SA="$(echo "$STATE_SA" | trim_tsv)"
+
+az account set --subscription "$SUB_ID"
+
+SP_OID="$(az_tsv ad sp show --id "$APP_ID" --query id)"
+STATE_SA_ID="$(az_tsv storage account show -n "$STATE_SA" -g "$STATE_RG" --query id)"
 
 echo "Service principal object id: $SP_OID"
 echo "Assigning Owner on subscription $SUB_ID ..."
-az role assignment create \
-  --assignee-object-id "$SP_OID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "Owner" \
-  --scope "/subscriptions/$SUB_ID" \
-  2>/dev/null || echo "(Owner assignment may already exist)"
+assign_sp_role "Owner" "/subscriptions/$SUB_ID" "$APP_ID" "$SP_OID" \
+  || echo "(Owner assignment failed — assign in Portal if needed)"
 
 echo "Assigning Storage Blob Data Contributor on $STATE_SA ..."
-az role assignment create \
-  --assignee-object-id "$SP_OID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "Storage Blob Data Contributor" \
-  --scope "$STATE_SA_ID" \
-  2>/dev/null || echo "(Storage assignment may already exist)"
+assign_sp_role "Storage Blob Data Contributor" "$STATE_SA_ID" "$APP_ID" "$SP_OID" \
+  || echo "(Storage assignment failed — assign in Portal if needed)"
 
 echo "Done."

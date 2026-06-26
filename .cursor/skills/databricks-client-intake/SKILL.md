@@ -1,18 +1,20 @@
 ---
 name: databricks-client-intake
 description: >-
-  Greenfield Databricks client engagement intake: parse a natural-language request,
-  apply ai-dev-kit and repo best practices, propose Terraform vs DAB architecture,
-  ask structured clarifying questions, then plan phased PRs (no cloud apply).
-  Use when the user mentions a new client, workspace setup, dev/prod environments,
-  medallion architecture, SDP/LDP, metric views, AI/BI dashboards, Genie spaces,
-  or "propose architecture" before implementation.
+  Greenfield Databricks client on the TEMPLATE repo: intake conversation, architecture
+  proposal in chat/working tree, clarifying questions. On GO run client-repo-go skill
+  (spawn new repo) — NEVER open a PR on the template for client work. Triggers: new
+  client, workspace setup, dev/prod, medallion, SDP, metric views, dashboards, Genie.
 ---
 
-# Databricks client intake (Option C)
+# Databricks client intake (template repo)
 
-Orchestrate **conversation → architecture → questions → phased PRs**. The cloud agent
-authors PRs; GitHub Actions applies via OIDC. See `AGENTS.md` and `docs/DEMO-SETUP.md`.
+Orchestrate **conversation → architecture → questions → GO → new client repo**.
+
+**On this template repo: do NOT open a PR** for client proposals or implementation.
+The deliverable is `scripts/spawn-client-repo.sh` after the user says **GO**.
+
+See `AGENTS.md` Mode A and [docs/CLIENT-REPO-BOOTSTRAP.md](../../../docs/CLIENT-REPO-BOOTSTRAP.md).
 
 ## Phase 0 — Do not code yet
 
@@ -105,45 +107,22 @@ Always mention applicable practices from `docs/ARCHITECTURE.md` §2, e.g.:
 - OIDC in CI, no long-lived secrets
 - Genie requires **direct** bundle engine (note CI CLI version implication)
 
-### 1.5 Phased delivery plan (PR slices)
+### 1.5 Phased delivery plan (after spawn — on **client repo**)
 
-Never one giant PR. Propose order:
+| Phase | Contents | Where |
+|----|----------|-------|
+| GO | Spawn repo + platform deploy | Agent runs `spawn-client-repo.sh` |
+| PR 1 | SDP bronze/silver/gold skeleton | **Client repo** |
+| PR 2 | Metric view SQL job | Client repo |
+| PR 3 | Dashboard + Genie | Client repo |
+| PR 4 | CI smoke test extensions | Client repo |
 
-| PR | Contents | Risk |
-|----|----------|------|
-| 0 | **Architecture proposal** → `docs/architecture-proposals/<slug>.md` (PR by itself) | None |
-| 1 | Terraform: dual workspace/module params, env resolution for client slug | Medium — infra |
-| 2 | SDP pipeline skeleton (bronze/silver/gold) + synthetic/demo source | Low — bundle only |
-| 3 | Gold table contract + metric view SQL job | Low |
-| 4 | Dashboard + Genie (direct engine if needed) | Low — needs warehouse_id vars |
-| 5 | CI: extend smoke test (`bundle run` pipeline or job chain) | Low |
-| 6 | Docs: client runbook (GitHub Environment vars, not committed secrets) | Low |
+### 1.6 Persist the proposal (working tree — not template PR)
 
-### 1.6 Persist the proposal (required)
-
-After drafting the architecture in chat, **write it to the repo**:
-
-1. Copy [`docs/architecture-proposals/_TEMPLATE.md`](../../../docs/architecture-proposals/_TEMPLATE.md)
-   to `docs/architecture-proposals/<client-slug>-<short-scope>.md`.
-2. Fill all sections; set YAML `status: draft` or `questions-pending`.
-3. Set `created` to today's date (ISO `YYYY-MM-DD`).
-4. Prefer a **proposal-only PR** first (markdown only) so reviewers approve
-   architecture before code.
-5. See [`docs/architecture-proposals/README.md`](../../../docs/architecture-proposals/README.md).
-
-**Do not** put secrets or subscription IDs in the proposal file.
-
-When the user approves (or accepts demo defaults):
-
-- Set `status: approved`, `approved: YYYY-MM-DD`, fill **Decisions**, clear or
-  resolve **Open questions**, check **Approval** boxes.
-- Commit the update (same PR or follow-up) before opening implementation PR 1.
-
-Every implementation PR description must include:
-
-```markdown
-Architecture: docs/architecture-proposals/<client-slug>-<short-scope>.md (approved YYYY-MM-DD)
-```
+1. Copy `_TEMPLATE.md` to `docs/architecture-proposals/<client-slug>-<scope>.md` **locally**.
+2. Fill sections; `status: draft` until user approves.
+3. **Do not** open a PR on the template repo with client-specific content.
+4. On **GO**, `spawn-client-repo.sh` copies the proposal into the **new client repo**.
 
 ## Phase 2 — Clarifying questions (required)
 
@@ -190,14 +169,14 @@ Use **AskQuestion** when available; otherwise numbered list. Group by theme.
    (working tree, draft branch, or unmerged PR). The template stays a neutral showcase.
 3. When user approves, set proposal `status: approved` in the file (can happen at GO time).
 
-## Phase 4 — GO (spawn client repo + deploy)
+## Phase 4 — GO (spawn client repo + deploy) — **required next step**
 
-When the user says **GO** (or "create the repo", "deploy it"):
+When the user says **GO** or approves the proposal (including "yes deploy", "create the repo", "ship it"):
 
-1. Follow `.cursor/skills/client-repo-go/SKILL.md`.
-2. Run `scripts/spawn-client-repo.sh` with `CLIENT_SLUG` and `PROPOSAL_FILE`.
-3. Do **not** run `terraform apply` — deploy is triggered on the **new repo** via GHA.
-4. Tell user to open the client repo and connect Cursor there for implementation PRs.
+1. **Stop** — do not open a PR on the template repo.
+2. Follow `.cursor/skills/client-repo-go/SKILL.md`.
+3. Run spawn scripts with `CLIENT_SLUG` and `PROPOSAL_FILE`.
+4. Report the new repo URL and Actions deploy link.
 
 ## Phase 5 — Implementation (on client repo, after deploy)
 
@@ -218,7 +197,8 @@ When the user says **GO** (or "create the repo", "deploy it"):
 
 | Do not | Do instead |
 |--------|------------|
-| Commit `hike2` storage account names to **template** `main` | Spawn client repo; names live there |
+| Open a PR on **template** for client work | Intake in chat → GO → spawn |
+| Commit client names to **template** `main` | Names live in client repo only |
 | Put metric views in Terraform | SQL job in bundle |
 | Deploy Genie on legacy TF bundle engine | `engine: direct` + CLI 1.3+ |
 | Single PR for TF + SDP + Genie | Phased PRs per table above |

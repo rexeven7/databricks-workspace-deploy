@@ -34,8 +34,17 @@ GitHub → **Settings** → check **Template repository**.
 
 ### 2. Operator service principal (persistent in Cursor)
 
-Same as [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) Step 0 — Owner on your
-**demo subscription**. Keep `BOOTSTRAP_*` in Cursor; do not delete after each client.
+Run once on your laptop (subscription Owner):
+
+```bash
+az login
+bash scripts/create-operator-sp.sh
+```
+
+Copy all four `BOOTSTRAP_AZURE_*` values into Cursor **Runtime Secrets**. Keep them
+for every client — do not delete after each GO.
+
+Details: [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) Step 0–1.
 
 ### 3. Cursor Cloud secrets (template repo environment)
 
@@ -63,7 +72,20 @@ Same as [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) Step 0 — Owner on your
 
 ## Conversation flow (what you do in Cursor web)
 
-### Phase 1 — Intake (no deploy)
+### Copy-paste prompts
+
+**Intake (no deploy, no PR):**
+
+> New client `<name>` — propose architecture (medallion / SDP / whatever scope).
+> Ask questions first. Do **not** open a PR on this template repo.
+
+**After you approve the proposal:**
+
+> **GO** — slug `<slug>`, spawn the client repo and deploy.
+
+The agent must run `spawn-client-repo.sh`, **not** open a PR.
+
+### Phase 1 — Intake (no deploy, no PR)
 
 Open the **template** repo in Cursor Cloud Agent. Example prompt:
 
@@ -75,11 +97,11 @@ The agent follows `.cursor/skills/databricks-client-intake/SKILL.md`:
 
 - Asks clarifying questions
 - Shows architecture (matrix, mermaid, phased PRs)
-- Writes `docs/architecture-proposals/meridian-….md` (in the **template** working tree for review — **do not merge client names to template `main`** unless you want a generic example only)
+- Writes `docs/architecture-proposals/<slug>.md` **locally** (not a template PR)
 
-Iterate until you approve the proposal.
+Iterate until you approve.
 
-### Phase 2 — GO
+### Phase 2 — GO (repo + deploy — not a PR)
 
 When ready:
 
@@ -143,6 +165,7 @@ bash scripts/spawn-client-repo.sh
 
 | Symptom | Fix |
 |---------|-----|
+| **Agent opened a PR instead of spawning** | Say **GO** explicitly; push latest `main` (skills + `AGENTS.md`); prompt: "do not open a PR — run spawn-client-repo.sh" |
 | `Template not found` | Enable **Template repository** on this repo |
 | `Resource not accessible` | `GH_TOKEN` needs repo create + admin on org/user |
 | Federated credential limit | Entra apps allow many federated creds; names are per-repo |

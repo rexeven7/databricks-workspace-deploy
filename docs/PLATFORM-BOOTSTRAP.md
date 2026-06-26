@@ -47,26 +47,41 @@ in **spawned client repos**, not template `main`.
 
 ---
 
-## Step 0 — Create the operator service principal (once, outside Cursor)
+## Step 0 — Create the operator service principal (once, on your laptop)
 
-An **Owner** on the subscription creates a dedicated operator app. This is the only
-secret with broad Azure power in Cursor.
+This is the **only** step that uses your personal Azure login. Everything after
+goes into **Cursor Secrets** and stays there for every client demo.
+
+**Prereq:** you are **Owner** (or can create app registrations + assign roles) on
+the demo subscription.
 
 ```bash
-# Run locally as subscription Owner (not in the agent)
-OPERATOR_APP_ID=$(az ad app create --display-name "cursor-operator-dbx-demo" --query appId -o tsv)
-az ad sp create --id "$OPERATOR_APP_ID"
-OPERATOR_SECRET=$(az ad app credential reset --id "$OPERATOR_APP_ID" --query password -o tsv)
-
-az role assignment create --assignee "$OPERATOR_APP_ID" --role "Owner" \
-  --scope "/subscriptions/<SUBSCRIPTION_ID>"
-
-echo "Save for Cursor Runtime Secrets only:"
-echo "BOOTSTRAP_AZURE_CLIENT_ID=$OPERATOR_APP_ID"
-echo "BOOTSTRAP_AZURE_CLIENT_SECRET=(shown once above)"
+az login
+az account set --subscription "<your-demo-subscription>"
+bash scripts/create-operator-sp.sh
 ```
 
+The script:
+
+1. Creates (or reuses) Entra app `cursor-operator-dbx-demo`
+2. Adds a client secret (`--append` so old secrets are not wiped)
+3. Assigns **Owner** on the subscription using the service principal **object id**
+   (not the app id — the old copy-paste `az role assignment --assignee $APP_ID`
+   often fails with `PrincipalNotFound`)
+4. Prints all four `BOOTSTRAP_AZURE_*` values — copy them into Cursor **Runtime Secrets**
+
+| Cursor secret | Source |
+|---------------|--------|
+| `BOOTSTRAP_AZURE_CLIENT_ID` | script output |
+| `BOOTSTRAP_AZURE_CLIENT_SECRET` | script output (**once**) |
+| `BOOTSTRAP_AZURE_TENANT_ID` | script output |
+| `BOOTSTRAP_AZURE_SUBSCRIPTION_ID` | script output |
+
 You never put the operator secret in git.
+
+**If role assignment still fails:** wait 1–2 minutes after app creation and re-run
+the script, or assign Owner manually in Portal → Subscription → IAM → members →
+search `cursor-operator-dbx-demo`.
 
 ---
 
@@ -78,28 +93,30 @@ Dashboard → **Cloud Agents** → this repo’s environment → **Secrets**.
 
 | Name | Value |
 |------|--------|
-| `BOOTSTRAP_AZURE_CLIENT_ID` | Operator SP app id |
-| `BOOTSTRAP_AZURE_CLIENT_SECRET` | Operator SP secret |
-| `BOOTSTRAP_AZURE_TENANT_ID` | Entra tenant id |
-| `BOOTSTRAP_AZURE_SUBSCRIPTION_ID` | Azure subscription id |
-| `GH_TOKEN` | Fine-grained PAT for `GH_REPO` only |
+| `BOOTSTRAP_AZURE_CLIENT_ID` | From Step 0 |
+| `BOOTSTRAP_AZURE_CLIENT_SECRET` | From Step 0 |
+| `BOOTSTRAP_AZURE_TENANT_ID` | From Step 0 |
+| `BOOTSTRAP_AZURE_SUBSCRIPTION_ID` | From Step 0 |
+| `GH_TOKEN` | Fine-grained PAT — see scopes below |
 
-### Environment variables (non-secret — subscription-wide, not per demo)
+### Environment variables (non-secret)
 
-| Name | Example | Notes |
-|------|---------|--------|
-| `GH_REPO` | `youruser/databricks-workspace-deploy` | `owner/repo` |
-| `STATE_STORAGE_ACCOUNT_NAME` | `sttfdbxyourname01` | Globally unique; **shared** across all slugs on this sub |
-| `AZURE_LOCATION` | `eastus2` | Optional; used for every slug deploy |
-| `GHA_CLIENT_ID` | *(empty)* | Set only to **reuse** an existing CI app |
+| Name | Example | When needed |
+|------|---------|-------------|
+| `GH_TEMPLATE_REPO` | `youruser/databricks-workspace-deploy` | **GO flow** — spawn client repos from this template |
+| `STATE_STORAGE_ACCOUNT_NAME` | `sttfdbxyourname01` | Shared Terraform state SA (globally unique) |
+| `AZURE_LOCATION` | `eastus2` | Optional |
+| `GH_REPO` | `youruser/databricks-workspace-deploy` | Only for **slug demos on the template repo** (not GO) |
+| `GHA_CLIENT_ID` | *(empty)* | Reuse existing CI Entra app if you already created one |
 
-**Do not** put per-demo names (`WORKSPACE_NAME`, `UC_STORAGE_ACCOUNT_NAME`, client
-slugs) in Cursor env vars unless you intentionally run a fixed **production**
-environment — for learning, use **slug deploys** instead (Step 3).
+**`GH_TOKEN` scopes (fine-grained PAT):**
 
-Optional production overrides (only if you need merge-to-main with custom names):
-`WORKSPACE_NAME`, `UC_STORAGE_ACCOUNT_NAME`, `RESOURCE_GROUP_NAME`, `CATALOG_NAME`,
-`SCHEMA_NAME`, `WAREHOUSE_NAME`, `ADMIN_GROUP`, `DATA_ENGINEER_GROUP`.
+- **GO flow:** access to your user/org + **Administration** on repos you create from
+  template + **Secrets and variables** + **Actions** (workflow dispatch)
+- **Template slug demo only:** single-repo admin is enough
+
+**Do not** put per-client slugs or workspace names in Cursor env vars. Those come
+from chat at GO time (`CLIENT_SLUG`) or deploy workflow input.
 
 ---
 
@@ -167,7 +184,7 @@ bash scripts/trigger-demo-destroy.sh
 
 | Symptom | Fix |
 |---------|-----|
-| `MissingSubscription` on role assign | Operator SP needs **Owner** on the subscription |
+| `MissingSubscription` on role assign | **Git Bash on Windows:** re-run `bash scripts/create-operator-sp.sh` (CRLF fix). Or: `APP_ID=<id> SUB_ID=<sub> bash scripts/assign-operator-role.sh` |
 | `AuthorizationPermissionMismatch` on state | Re-run bootstrap; CI SP needs **Storage Blob Data Contributor** on state SA |
 | `gh: Resource not accessible` | PAT needs workflow + secrets/variables scope |
 | Storage account name taken | Pick another `STATE_STORAGE_ACCOUNT_NAME` in Cursor env |
