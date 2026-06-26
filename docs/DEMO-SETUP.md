@@ -203,13 +203,25 @@ After deploy, CI runs the `sample_ingest` job automatically (populates `prod.sal
 
 ### Slug sandbox deploy (no commits to `main`)
 
+**Prerequisite:** GitHub → Environments → **production** must have:
+
+| Variable | Your value |
+|----------|------------|
+| `STATE_STORAGE_ACCOUNT_NAME` | `sttfdbxrexeven701` (your existing state SA) |
+| `STATE_RESOURCE_GROUP_NAME` | `rg-tfstate` |
+| `AZURE_LOCATION` | `eastus2` |
+
+The slug does **not** pick the state storage account — it only picks the **state key**
+inside that account (e.g. `databricks/hike2/10-infra.tfstate`). Terraform layer 10
+still creates a **new** UC data storage account per slug (e.g. `stdbxhike2af2c33`).
+
 1. Actions → **deploy** → Run workflow.
-2. `deployment_slug`: e.g. `demo-jun25` (alphanumeric; state prefix `databricks/<slug>/`).
+2. `deployment_slug`: e.g. `Hike2` (normalized to `hike2`).
 3. Optionally check **run_bundle_job**.
 4. Approve the `production` environment if reviewers are configured.
 5. Watch layer 10 → 20 → bundle complete.
 
-Example slug `demojun25` creates: `rg-dbx-demojun25`, `dbw-demojun25`, catalog `demojun25`.
+Preview locally: `VAR_STATE_STORAGE_ACCOUNT_NAME=sttfdbxrexeven701 DEPLOYMENT_SLUG=Hike2 bash scripts/print-deploy-names.sh`
 
 **Not for real client production** — use change-managed destroy outside this template.
 

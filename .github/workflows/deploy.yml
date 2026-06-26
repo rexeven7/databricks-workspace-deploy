@@ -64,7 +64,7 @@ jobs:
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
 
       - name: Apply (layer 10)
-        run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
+        run: bash ../../../.github/scripts/terraform-with-deployment-vars.sh apply -auto-approve -input=false
 
       - name: Capture workspace URL
         id: out
@@ -110,7 +110,7 @@ jobs:
         run: bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
 
       - name: Apply (layer 20)
-        run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
+        run: bash ../../../.github/scripts/terraform-with-deployment-vars.sh apply -auto-approve -input=false
 
       - name: Capture platform outputs
         id: out

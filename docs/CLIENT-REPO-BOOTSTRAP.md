@@ -219,6 +219,27 @@ export GH_TEMPLATE_REPO=rexeven7/databricks-workspace-deploy
 bash scripts/spawn-client-repo.sh
 ```
 
+### Storage account errors (manual **deploy**)
+
+Slug deploy uses **two** storage accounts:
+
+| Account | Who creates it | GitHub variable | Example |
+|---------|----------------|-----------------|---------|
+| **Terraform state** (shared) | You, once | `STATE_STORAGE_ACCOUNT_NAME` on `production` env | `sttfdbxrexeven701` |
+| **UC data** (per slug) | Terraform layer 10 | Auto from slug (+ hash); override `UC_STORAGE_ACCOUNT_NAME` | `stdbxmeridiana1b2c3` |
+
+**Common failures**
+
+- `StorageAccountNotFound` / backend init error → **`STATE_STORAGE_ACCOUNT_NAME` wrong or unset** on that repo’s `production` environment. Must be your real state SA, not the placeholder `sttfstatedbxdemo`.
+- `StorageAccountAlreadyTaken` / name unavailable → UC name taken globally. Use a different `deployment_slug`, or set GitHub var **`UC_STORAGE_ACCOUNT_NAME`** (3–24 lowercase alphanumeric) before deploy.
+
+Preview names locally:
+
+```bash
+export VAR_STATE_STORAGE_ACCOUNT_NAME=sttfdbxrexeven701   # your real state SA
+DEPLOYMENT_SLUG=meridian bash scripts/print-deploy-names.sh
+```
+
 ---
 
 ## Related

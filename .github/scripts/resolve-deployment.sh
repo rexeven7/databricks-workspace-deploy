@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../../scripts/lib/deploy-names.sh
+source "$script_dir/../../scripts/lib/deploy-names.sh"
+
 mode="production"
 slug=""
 
@@ -27,17 +31,24 @@ state_sa="${VAR_STATE_STORAGE_ACCOUNT_NAME:-sttfstatedbxdemo}"
 location="${VAR_AZURE_LOCATION:-eastus2}"
 schema_name="${VAR_SCHEMA_NAME:-sales}"
 
+if [ -n "${GITHUB_ACTIONS:-}" ] && [ -z "${VAR_STATE_STORAGE_ACCOUNT_NAME:-}" ]; then
+  echo "ERROR: GitHub Environment 'production' is missing variable STATE_STORAGE_ACCOUNT_NAME." >&2
+  echo "Set it to your existing state storage account (e.g. sttfdbxrexeven701 in rg-tfstate)." >&2
+  echo "Slug deploy uses that account with a per-slug state key (e.g. databricks/hike2/10-infra.tfstate)." >&2
+  exit 1
+fi
+
 emit() { printf '%s\n' "$1"; }
 
 emit "DEPLOYMENT_MODE=$mode"
 
 if [ "$mode" = "sandbox" ]; then
-  sa_suffix="$(echo "$slug" | cut -c1-18)"
+  uc_sa="$(resolve_uc_storage_account_name "$slug")"
   emit "TF_VAR_environment=$slug"
   emit "TF_VAR_location=$location"
   emit "TF_VAR_resource_group_name=rg-dbx-${slug}"
   emit "TF_VAR_workspace_name=dbw-${slug}"
-  emit "TF_VAR_uc_storage_account_name=stdbx${sa_suffix}"
+  emit "TF_VAR_uc_storage_account_name=${uc_sa}"
   emit "TF_VAR_catalog_name=$slug"
   emit "TF_VAR_schema_name=$schema_name"
   emit "TF_VAR_warehouse_name=wh-${slug}"
@@ -52,7 +63,7 @@ if [ "$mode" = "sandbox" ]; then
   emit "BUNDLE_CATALOG=$slug"
   emit "BUNDLE_SCHEMA=$schema_name"
 else
-  # Production: optional GitHub Environment vars override committed tfvars (TF_VAR wins).
+  # Production: optional GitHub Environment vars override committed tfvars.
   [ -n "${VAR_WORKSPACE_NAME:-}" ] && emit "TF_VAR_workspace_name=${VAR_WORKSPACE_NAME}"
   [ -n "${VAR_UC_STORAGE_ACCOUNT_NAME:-}" ] && emit "TF_VAR_uc_storage_account_name=${VAR_UC_STORAGE_ACCOUNT_NAME}"
   [ -n "${VAR_RESOURCE_GROUP_NAME:-}" ] && emit "TF_VAR_resource_group_name=${VAR_RESOURCE_GROUP_NAME}"
