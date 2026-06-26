@@ -68,7 +68,11 @@ irm https://raw.githubusercontent.com/databricks-solutions/ai-dev-kit/main/insta
 
 ### C3–C4. Secrets
 
-**Do not** put cloud credentials in Cursor. See [AGENTS.md](../AGENTS.md).
+**Default:** do not put cloud credentials in Cursor — CI applies via OIDC.
+
+**Optional demo bootstrap:** [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) — temporary
+`BOOTSTRAP_*` + `GH_TOKEN` in Cursor Secrets; agent runs `scripts/bootstrap-platform.sh`.
+Delete bootstrap secrets after; CI OIDC deploys ongoing.
 
 ### C5. Run it
 

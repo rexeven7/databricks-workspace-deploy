@@ -10,9 +10,13 @@ things:
   `live/20-platform`). See `README.md` and `docs/INTERVIEW.md`.
 - **Databricks Asset Bundle** (`bundle/`) — a serverless job + notebook.
 
-**Prerequisites (human setup, not the agent):** See [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md)
+**Prerequisites (human setup, not the agent by default):** See [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md)
 for Azure OIDC, GitHub secrets/variables, and the protected `production`
-environment. The agent does not need cloud credentials.
+environment. The default agent workflow does **not** need cloud credentials.
+
+**Platform bootstrap (demo):** [docs/PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md) —
+temporary `BOOTSTRAP_*` secrets in Cursor; agent runs `scripts/bootstrap-platform.sh`.
+Delete bootstrap secrets after; CI OIDC handles deploy.
 
 ---
 
@@ -25,6 +29,11 @@ environment. The agent does not need cloud credentials.
    `docs/architecture-proposals/<client-slug>-<scope>.md` (from `_TEMPLATE.md`); prefer
    a proposal-only PR before implementation. See
    [docs/architecture-proposals/README.md](docs/architecture-proposals/README.md).
+0b. **Platform bootstrap (demo only)** — When the user asks to bootstrap OIDC, GitHub
+   secrets, or state storage: follow `.cursor/skills/platform-bootstrap/SKILL.md` and
+   [docs/PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md). Run
+   `scripts/bootstrap-validate-env.sh` then `scripts/bootstrap-platform.sh` only.
+   Never commit secrets.
 1. **Gather parameters in conversation** — region, deployment slug, catalog/schema
    names, feature requests. Do not ask the user to edit tfvars by hand unless they
    prefer it; prefer documenting runtime overrides (GitHub Environment vars or
@@ -48,10 +57,13 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 ---
 
-## What the cloud agent should NOT do
+## What the cloud agent should NOT do (default)
 
-- **Do not** store or use `ARM_*`, `AZURE_*`, or Databricks secrets. CI applies
-  via federated OIDC (see `docs/DEMO-SETUP.md`).
+- **Do not** store or use `ARM_*`, `AZURE_*`, or Databricks secrets for routine PR
+  work. CI applies via federated OIDC (see `docs/DEMO-SETUP.md`).
+- **Exception:** one-time **platform bootstrap** when user requests it and Cursor
+  Secrets are set per [PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md) — run bootstrap
+  scripts only; never commit secret values.
 - **Do not** run `terraform apply`, `terraform plan` (needs backend + Azure), or
   `databricks bundle deploy` unless the user explicitly overrides this policy for
   a local session with their own credentials.

@@ -126,5 +126,7 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 **Greenfield client intake** (architecture proposals before implementation): [docs/architecture-proposals/README.md](docs/architecture-proposals/README.md).
 
+**Demo platform bootstrap** (OIDC + GitHub + state via Cursor agent): [docs/PLATFORM-BOOTSTRAP.md](docs/PLATFORM-BOOTSTRAP.md).
+
 See [docs/INTERVIEW.md](docs/INTERVIEW.md) for every best practice, *why* it's
 there, and *where* it comes from.

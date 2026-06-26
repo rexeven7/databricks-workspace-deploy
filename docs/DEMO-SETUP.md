@@ -37,7 +37,7 @@ grant the CI service principal:
 Or, from a shell where you have UAA/Owner:
 
 ```bash
-bash scripts/assign-ci-roles.sh
+APP_ID="<CI_APP_ID>" SUB_ID="<SUBSCRIPTION_ID>" STATE_SA="<STATE_SA>" bash scripts/assign-ci-roles.sh
 ```
 
 ---
@@ -101,10 +101,15 @@ Prefer **OIDC + `DATABRICKS_AUTH_TYPE=azure-cli`** for deploy (no Databricks sec
 |---|---|
 | GitHub repo connected | Cursor dashboard → connect `rexeven7/databricks-workspace-deploy` |
 | `.cursor/environment.json` | Committed — installs Terraform + Databricks CLI in the agent VM |
-| **No** cloud secrets in Cursor | Agent runs offline checks + opens PRs; **GitHub Actions applies** via OIDC |
+| **Default: no cloud secrets** | Agent runs offline checks + opens PRs; **GitHub Actions applies** via OIDC |
+| **Platform bootstrap** | One-time demo setup via Cursor Secrets — [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) |
 | ai-dev-kit skills | `install.ps1 --tools cursor --skills-only --skills-profile data-engineer --silent` → `.cursor/skills/` (committed) |
 
-### Entra app bootstrap (copy-paste)
+For OIDC + GitHub secrets + state storage, follow **[PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md)**
+(two service principals: temporary bootstrap SP in Cursor, permanent CI SP in GitHub).
+
+Legacy manual commands (reference only):
+
 
 Replace placeholders, run once locally (`az login`):
 
@@ -277,6 +282,7 @@ Do **not** commit client-specific storage account names or state backends to `ma
 
 ## Related docs
 
-- [NEXT-STEPS.md](NEXT-STEPS.md) — original Option B/C hand-off (bootstrap commands)
+- [PLATFORM-BOOTSTRAP.md](PLATFORM-BOOTSTRAP.md) — safe Cursor/agent OIDC bootstrap
+- [NEXT-STEPS.md](NEXT-STEPS.md) — Option B/C hand-off
 - [INTERVIEW.md](INTERVIEW.md) — talking points and architecture
 - [AGENTS.md](../AGENTS.md) — what the cloud agent should and should not do
