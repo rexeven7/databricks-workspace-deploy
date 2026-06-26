@@ -1,6 +1,6 @@
 name: terraform
 
-# PR: offline validate + cloud plan (OIDC). Main: apply production. Dispatch: see deploy.yml.
+# PR: offline validate + cloud plan (OIDC). Main: apply platform then bundle (hands-off).
 on:
   pull_request:
     paths: ["terraform/**", ".github/workflows/terraform.yml", ".github/scripts/**"]
@@ -15,11 +15,17 @@ on:
     inputs:
       deployment_slug:
         description: >-
-          Ephemeral sandbox slug (e.g. interview-jun25). Leave empty to apply
-          production values from the GitHub Environment. Prefer the "deploy"
-          workflow for a full stack (Terraform + bundle).
+          Optional sandbox slug (ephemeral names/state). Leave empty for production.
+          Prefer the "deploy" workflow for interview sandboxes.
         required: false
         type: string
+      bundle_only:
+        description: >-
+          Deploy/update the asset bundle only (platform must already exist).
+          Use this to catch up when Terraform ran but the bundle did not.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -181,11 +187,14 @@ jobs:
 
   apply-infra:
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.ref == 'refs/heads/main' && needs.changes.outputs.terraform == 'true')
+      (github.event_name != 'workflow_dispatch' || inputs.bundle_only != true) &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.ref == 'refs/heads/main' && needs.changes.outputs.terraform == 'true'))
     needs: [changes, validate]
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      workspace_url: ${{ steps.out.outputs.workspace_url }}
     defaults:
       run:
         working-directory: terraform/live/10-infra
@@ -226,13 +235,21 @@ jobs:
       - name: Apply (layer 10)
         run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
 
+      - name: Capture workspace URL
+        id: out
+        run: echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
+
   apply-platform:
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.ref == 'refs/heads/main' && needs.changes.outputs.terraform == 'true')
+      (github.event_name != 'workflow_dispatch' || inputs.bundle_only != true) &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.ref == 'refs/heads/main' && needs.changes.outputs.terraform == 'true'))
     needs: [changes, apply-infra]
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      warehouse_id: ${{ steps.out.outputs.warehouse_id }}
+      catalog_name: ${{ steps.out.outputs.catalog_name }}
     defaults:
       run:
         working-directory: terraform/live/20-platform
@@ -268,3 +285,82 @@ jobs:
 
       - name: Apply (layer 20)
         run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
+
+      - name: Capture platform outputs
+        id: out
+        run: |
+          echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
+          echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+
+  bundle-deploy:
+    needs: [apply-infra, apply-platform]
+    if: needs.apply-platform.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: bundle
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: databricks/setup-cli@main
+      - name: Deploy asset bundle
+        env:
+          DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
+          WAREHOUSE_ID: ${{ needs.apply-platform.outputs.warehouse_id }}
+          BUNDLE_CATALOG: ${{ needs.apply-platform.outputs.catalog_name }}
+          BUNDLE_SCHEMA: sales
+        run: bash ../.github/scripts/bundle-deploy-ci.sh
+
+  bundle-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.bundle_only
+    needs: [changes]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
+      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+      VAR_CATALOG_NAME: ${{ vars.CATALOG_NAME }}
+      VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+      VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+    defaults:
+      run:
+        working-directory: terraform/live/20-platform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+      - name: Resolve deployment inputs
+        run: bash ../../../.github/scripts/load-deployment-env.sh
+      - name: Read platform outputs from state
+        id: tf
+        run: |
+          bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+          echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
+          echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+      - name: Read workspace URL from state
+        id: ws
+        working-directory: terraform/live/10-infra
+        run: |
+          bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
+          echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
+      - uses: databricks/setup-cli@main
+      - name: Deploy asset bundle
+        working-directory: bundle
+        env:
+          DATABRICKS_HOST: ${{ steps.ws.outputs.workspace_url }}
+          WAREHOUSE_ID: ${{ steps.tf.outputs.warehouse_id }}
+          BUNDLE_CATALOG: ${{ steps.tf.outputs.catalog_name }}
+          BUNDLE_SCHEMA: sales
+        run: bash ../.github/scripts/bundle-deploy-ci.sh

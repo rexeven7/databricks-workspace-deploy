@@ -82,10 +82,10 @@ These override committed `prod.tfvars` at runtime (`TF_VAR_*`). Names are not se
 | `WAREHOUSE_NAME` | `wh-demo-prod` | SQL warehouse |
 | `ADMIN_GROUP` | `account users` | UC catalog admin principal |
 | `DATA_ENGINEER_GROUP` | `account users` | UC engineer grants |
-| `DATABRICKS_HOST` | `https://adb-….azuredatabricks.net` | Bundle validate/deploy (after first deploy) |
-| `WAREHOUSE_ID` | `a1b2c3…` | Bundle `--var warehouse_id` for prod target |
 
-Optional bundle PR validate secrets (only if you want `bundle validate` on every PR before any workspace exists):
+`DATABRICKS_HOST` and `WAREHOUSE_ID` are **not** required for deploy — CI reads them from Terraform state outputs. Optional: set `DATABRICKS_HOST` only if you want `bundle validate` on PRs before any workspace exists.
+
+Optional bundle PR validate secrets (only if `DATABRICKS_HOST` is set for early PR validation):
 
 | Secret | Purpose |
 |---|---|
@@ -152,10 +152,20 @@ Set `STATE_STORAGE_ACCOUNT_NAME` on the `production` environment to `<STATE_SA>`
 | Workflow | Trigger | What it does |
 |---|---|---|
 | **terraform** | PR | Offline `fmt` / `validate` / `test` + **cloud `plan`** (OIDC) posted to job summary |
-| **terraform** | Push to `main` | Apply layer 10 → 20 using **production** env vars |
-| **bundle** | PR | `bundle validate` (needs `DATABRICKS_HOST`) |
-| **bundle** | Push to `main` | `bundle deploy -t prod` via Azure CLI token exchange |
+| **terraform** | Push to `main` (`terraform/**`) | Apply layer 10 → 20, then **bundle deploy** (reads host/warehouse from Terraform outputs) |
+| **terraform** | Manual dispatch, `bundle_only` | Deploy/update bundle only (platform already exists) |
+| **bundle** | PR | `bundle validate` (optional; needs `DATABRICKS_HOST` env var) |
+| **bundle** | Push to `main` (`bundle/**`) | `bundle deploy -t ci` via Azure CLI (reads Terraform state) |
 | **deploy** | Manual (`workflow_dispatch`) | **Interview path:** slug → isolated state + resources → Terraform → bundle |
+
+### If Terraform ran but the bundle did not (catch-up)
+
+This can happen when platform was applied before bundle deploy was wired into CI, or when only workflow files changed on `main` (apply is skipped; bundle is not).
+
+1. **Easiest:** merge/push any change under `bundle/**` — `bundle.yml` deploys from Terraform state (no manual vars).
+2. **Or:** Actions → **terraform** → Run workflow → check **bundle_only** → Run.
+
+After deploy, run the `sample_ingest` job from the workspace UI or `databricks bundle run sample_ingest -t ci`.
 
 ### Interview sandbox deploy (no commits to `main`)
 

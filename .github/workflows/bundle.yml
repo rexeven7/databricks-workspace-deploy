@@ -1,7 +1,8 @@
 name: bundle
 
-# PR: validate (needs a live workspace — see docs/DEMO-SETUP.md).
-# Main: deploy prod target. Sandbox / interview: use the "deploy" workflow instead.
+# PR: validate when DATABRICKS_HOST is configured.
+# Main: deploy on bundle/** changes (reads Terraform state for host/warehouse — no manual vars).
+# Full stack on terraform/** changes: see terraform.yml (apply → bundle-deploy).
 on:
   pull_request:
     paths: ["bundle/**", ".github/workflows/bundle.yml"]
@@ -11,17 +12,13 @@ on:
       - bundle/**
       - .github/workflows/bundle.yml
   workflow_dispatch:
-    inputs:
-      target:
-        description: Bundle target
-        required: true
-        default: prod
-        type: choice
-        options: [ci, prod, dev]
 
 permissions:
   contents: read
   id-token: write
+
+env:
+  TF_IN_AUTOMATION: "true"
 
 jobs:
   validate:
@@ -30,7 +27,6 @@ jobs:
     defaults:
       run:
         working-directory: bundle
-    # validate requires DATABRICKS_HOST — set on the production environment (see DEMO-SETUP).
     steps:
       - uses: actions/checkout@v5
       - uses: databricks/setup-cli@main
@@ -42,13 +38,11 @@ jobs:
         run: databricks bundle validate -t dev
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DATABRICKS_HOST != ''
-    needs: validate
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: production
-    defaults:
-      run:
-        working-directory: bundle
     steps:
       - uses: actions/checkout@v5
       - uses: azure/login@v3
@@ -56,47 +50,35 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Configure Databricks CLI (Azure CLI token exchange)
-        env:
-          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-        run: |
-          if [ -z "$DATABRICKS_HOST" ]; then
-            echo "Set vars.DATABRICKS_HOST on the production environment (see docs/DEMO-SETUP.md)" >&2
-            exit 1
-          fi
-          echo "DATABRICKS_AUTH_TYPE=azure-cli" >> "$GITHUB_ENV"
-      - uses: databricks/setup-cli@main
-      - name: Deploy (prod target)
-        env:
-          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-          WAREHOUSE_ID: ${{ vars.WAREHOUSE_ID }}
-        run: |
-          databricks bundle deploy -t prod \
-            --var="warehouse_id=${WAREHOUSE_ID}"
-
-  deploy-dispatch:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment: production
-    defaults:
-      run:
-        working-directory: bundle
-    steps:
-      - uses: actions/checkout@v5
-      - uses: azure/login@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Configure Databricks CLI
+          terraform_version: "1.9.8"
+      - name: Resolve deployment inputs
         env:
-          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-        run: echo "DATABRICKS_AUTH_TYPE=azure-cli" >> "$GITHUB_ENV"
-      - uses: databricks/setup-cli@main
-      - name: Deploy (selected target)
-        env:
-          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-          WAREHOUSE_ID: ${{ vars.WAREHOUSE_ID }}
+          VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
+          VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
+          VAR_ADMIN_GROUP: ${{ vars.ADMIN_GROUP }}
+          VAR_DATA_ENGINEER_GROUP: ${{ vars.DATA_ENGINEER_GROUP }}
+        run: bash .github/scripts/load-deployment-env.sh
+      - name: Read platform outputs from state
+        id: platform
+        working-directory: terraform/live/20-platform
         run: |
-          databricks bundle deploy -t "${{ inputs.target }}" \
-            --var="warehouse_id=${WAREHOUSE_ID}"
+          bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_PLATFORM"
+          echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
+          echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
+      - name: Read workspace URL from state
+        id: infra
+        working-directory: terraform/live/10-infra
+        run: |
+          bash ../../../.github/scripts/terraform-backend-init.sh "$BACKEND_KEY_INFRA"
+          echo "workspace_url=$(terraform output -raw workspace_url)" >> "$GITHUB_OUTPUT"
+      - uses: databricks/setup-cli@main
+      - name: Deploy asset bundle
+        working-directory: bundle
+        env:
+          DATABRICKS_HOST: ${{ steps.infra.outputs.workspace_url }}
+          WAREHOUSE_ID: ${{ steps.platform.outputs.warehouse_id }}
+          BUNDLE_CATALOG: ${{ steps.platform.outputs.catalog_name }}
+          BUNDLE_SCHEMA: sales
+        run: bash ../.github/scripts/bundle-deploy-ci.sh

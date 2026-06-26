@@ -76,6 +76,7 @@ jobs:
     environment: production
     outputs:
       warehouse_id: ${{ steps.out.outputs.warehouse_id }}
+      catalog_name: ${{ steps.out.outputs.catalog_name }}
     defaults:
       run:
         working-directory: terraform/live/20-platform
@@ -110,9 +111,11 @@ jobs:
       - name: Apply (layer 20)
         run: terraform apply -auto-approve -var-file=env/prod.tfvars -input=false
 
-      - name: Capture warehouse id
+      - name: Capture platform outputs
         id: out
-        run: echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "warehouse_id=$(terraform output -raw warehouse_id)" >> "$GITHUB_OUTPUT"
+          echo "catalog_name=$(terraform output -raw catalog_name)" >> "$GITHUB_OUTPUT"
 
   bundle:
     needs: [apply-infra, apply-platform]
@@ -126,14 +129,8 @@ jobs:
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      INPUT_DEPLOYMENT_SLUG: ${{ github.event.inputs.deployment_slug }}
-      VAR_STATE_RESOURCE_GROUP_NAME: ${{ vars.STATE_RESOURCE_GROUP_NAME }}
-      VAR_STATE_STORAGE_ACCOUNT_NAME: ${{ vars.STATE_STORAGE_ACCOUNT_NAME }}
     steps:
       - uses: actions/checkout@v5
-
-      - name: Resolve sandbox deployment inputs
-        run: bash ../.github/scripts/load-deployment-env.sh
 
       - uses: azure/login@v3
         with:
@@ -141,31 +138,23 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Configure Databricks CLI (Azure CLI token exchange)
-        run: |
-          echo "DATABRICKS_HOST=https://${{ needs.apply-infra.outputs.workspace_url }}" >> "$GITHUB_ENV"
-          echo "DATABRICKS_AUTH_TYPE=azure-cli" >> "$GITHUB_ENV"
-
       - uses: databricks/setup-cli@main
 
-      - name: Validate bundle (ci target)
-        run: |
-          databricks bundle validate -t ci \
-            --var="catalog=${BUNDLE_CATALOG}" \
-            --var="schema=${BUNDLE_SCHEMA}" \
-            --var="warehouse_id=${{ needs.apply-platform.outputs.warehouse_id }}"
-
-      - name: Deploy bundle (ci target)
-        run: |
-          databricks bundle deploy -t ci \
-            --var="catalog=${BUNDLE_CATALOG}" \
-            --var="schema=${BUNDLE_SCHEMA}" \
-            --var="warehouse_id=${{ needs.apply-platform.outputs.warehouse_id }}"
+      - name: Deploy asset bundle (ci target)
+        env:
+          DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
+          WAREHOUSE_ID: ${{ needs.apply-platform.outputs.warehouse_id }}
+          BUNDLE_CATALOG: ${{ needs.apply-platform.outputs.catalog_name }}
+          BUNDLE_SCHEMA: sales
+        run: bash ../.github/scripts/bundle-deploy-ci.sh
 
       - name: Run sample ingest (optional)
         if: inputs.run_bundle_job
+        env:
+          DATABRICKS_HOST: ${{ needs.apply-infra.outputs.workspace_url }}
+          DATABRICKS_AUTH_TYPE: azure-cli
         run: |
           databricks bundle run sample_ingest -t ci \
-            --var="catalog=${BUNDLE_CATALOG}" \
-            --var="schema=${BUNDLE_SCHEMA}" \
+            --var="catalog=${{ needs.apply-platform.outputs.catalog_name }}" \
+            --var="schema=sales" \
             --var="warehouse_id=${{ needs.apply-platform.outputs.warehouse_id }}"

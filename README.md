@@ -115,8 +115,10 @@ terraform -chdir=terraform/live/20-platform init -backend=false && terraform -ch
 
 - **PR** → `terraform fmt/validate/test` (mocked) + **resolve-deployment env test** +
   **`terraform plan`** (OIDC) + `bundle validate` (needs a live workspace).
-- **Merge to `main`** → `terraform apply` then `bundle deploy` (production Environment vars).
+- **Merge to `main`** → `terraform apply` then **`bundle deploy`** in one workflow (host/warehouse from Terraform outputs — no manual `DATABRICKS_HOST` var).
+- **Bundle-only changes on `main`** → `bundle.yml` deploys from Terraform state.
 - **Manual `deploy` workflow** → ephemeral sandbox from a slug (interview demos; no commits).
+- **Catch-up** → Actions → **terraform** → Run workflow → check **bundle_only** if platform already exists.
 
 **One-time platform setup** (Azure OIDC, GitHub secrets/variables, Cursor): [docs/DEMO-SETUP.md](docs/DEMO-SETUP.md).
 

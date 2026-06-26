@@ -26,4 +26,4 @@ resources:
       # Cannot modify the "admins" group on jobs; grant a real custom group.
       permissions:
         - level: CAN_VIEW
-          group_name: data-engineers
+          group_name: users
